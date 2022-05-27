@@ -1,0 +1,709 @@
+---
+title: "Daacs - STM Analyses"
+author: "Sean Connin"
+date: "5/27/22"
+output:
+  html_document: 
+    toc: TRUE
+    toc-title: ""
+    toc_depth: 3
+    toc_float: 
+      collapsed: TRUE
+      smooth_scroll: FALSE
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+    theme: sandstone
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load libraries
+
+```{r}
+library(tidyverse)
+library(httr)
+library(magrittr)
+library(stm)
+library(igraph)#network graph
+library(tidytext)
+library(patchwork)
+library(kableExtra)
+library(wordcloud)
+library(RColorBrewer)
+
+```
+
+Load corpus, kresult, and models -- from preprocess_data_final and stm topic models
+
+Models loaded in this file. 
+
+- optimized.prevalence.models.6_32.Rda ==> contains models generated via. manyTopics()
+
+- optimized.prevalence.models.6_32.Rda ==> contains models generated via. selectTopics(). 
+
+- prev.content.stm.6_32.Rda ==> contains models defined without optimization (prevalence & content formula)
+
+- prev.stm ==> contains models defined without optimization (prevalence formula)
+
+Note: optimized models referred to automatic selections based on  high-likelihood values.
+
+```{r}
+
+#load processed corpus - documents, vocab, meta
+
+processed<-load("processed_corpus_final.Rdata")
+
+# load optimized prevalence models 
+
+prev.models<-load('optimized.prevalence.models.6_32.Rda') 
+
+#load optimized prevalence & content models
+
+prev.content.models<-load('optimized.prevalence.content.models.6_32.Rda')
+
+# load basic stm prevalence & content models
+
+prev.content.stm<-load('stm.prevalence.content.models.6_32.Rda')
+
+# load basic stm prevalence model
+
+prev.stm<-load('stm.prevalence.models.6_32.Rda')
+
+# load basic stm content model
+
+content.stm<-load('stm.content.models.6_32.Rda')
+
+```
+
+Load raw essays and bind to filtered identifiers (doc_id, institution) - original text less any essays filtered out during preprocessing. 
+
+```{r}
+
+# subset doc_id and text from prepDocuments output
+
+filtered<-meta%>%
+  select(doc_id, institution, text)
+
+filter_id<-filtered%>%
+  select(doc_id)
+
+#load raw data
+
+preclean<-read_csv("preclean_text.csv")
+
+
+# remove obs in original data that are not included in prepDocuments output -- for use in topic exemplar review
+
+original<- left_join(filter_id, preclean, by='doc_id')
+
+```
+
+Plot coherence vs exclusivity for optimized models with prevalence formula only. This provides an example for model selection.
+
+
+Note: these plots cannot be graphed when content formula is included in the model.
+
+```{r}
+
+# build dataframes with exclusivity and coherence measures for each optimized model in the 
+
+CE6<-as.data.frame(cbind(c(1:6),exclusivity(stm.model.6), semanticCoherence(model=stm.model.6, documents), "Mod6"))
+CE12<-as.data.frame(cbind(c(1:12),exclusivity(stm.model.12), semanticCoherence(model=stm.model.12, documents), "Mod12"))
+CE18<-as.data.frame(cbind(c(1:18),exclusivity(stm.model.18), semanticCoherence(model=stm.model.18, documents), "Mod18"))
+CE24<-as.data.frame(cbind(c(1:24),exclusivity(stm.model.24), semanticCoherence(model=stm.model.24, documents), "Mod24"))
+CE32<-as.data.frame(cbind(c(1:32),exclusivity(stm.model.32), semanticCoherence(model=stm.model.32, documents), "Mod32"))
+
+# combine diagnostics for each model 
+
+CE6_32<-rbind(CE6, CE12, CE18, CE24, CE32)
+
+#reset column names
+
+colnames(CE6_32)<-c("K","Exclusivity", "SemanticCoherence", "Model")
+
+#reset feature types
+
+CE6_32$Exclusivity<-as.numeric(as.character(CE6_32$Exclusivity))
+CE6_32$SemanticCoherence<-as.numeric(as.character(CE6_32$SemanticCoherence))
+
+CE6_32$Model<-factor(CE6_32$Model, levels = c('Mod6', 'Mod12', 'Mod18', 'Mod24', 'Mod32'))
+
+#save(CE6_28, file="exclusivity_coherence6-28.Rdata") # save results to local directory
+
+# build exclusivity & coherence plot for models
+
+plot<-ggplot(CE6_32, aes(SemanticCoherence, Exclusivity, color = Model))+geom_point(size = 2, alpha = 0.7) + 
+geom_text(aes(label=K), nudge_x=.09, nudge_y=.09, size= 2.5)+
+  labs(x = "Semantic coherence",
+       y = "Exclusivity",
+       title = "Model Diagnostics: Exclusivity and Semantic Coherence",
+       subtitle = 'Prevalence Formula: manyTopics()')+
+  theme_classic()
+
+```
+
+
+Plot topic quality  and prevalence for K = 12, prevalence model and basic STM. Highest probability words.
+
+```{r}
+
+# Plot topic quality by model (coherence & exclusivity) 
+
+topicQuality(stm.model.12, documents)
+
+```
+
+Compare topic prevalence across optimized and non-optimized models for K=12
+
+```{r}
+# plot topic prevalence across documents
+
+plot(stm.model.12, main='Topic Prevalence - K12 (manyTopics)') # highest probability words
+
+# plot topic prevalence basic stm model
+
+plot(stm.p.12, main='Topic Prevalence - K12 (STM)')
+```
+
+It is possible to create a topic prevalence plot using models built on prevalence & content formula (although not with topicQuality()). In this context, we can compare differences in models (with same K) that pass the optimization process.
+
+Note that the results will also be different from the optimized model built on prevalence formula alone, owing to different initializations and model selection. 
+
+```{r}
+
+# plot k = 12, optimized prevalence formula 
+
+multi.p.12<-tidy(stm.model.12, matrix = "gamma")%>%
+  select(!document)%>%
+  group_by(topic)%>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0)))%>%
+  mutate(proportion = (gamma/8120)*100)
+
+multi.p.12$topic <- factor(multi.p.12$topic, levels=multi.p.12[order(multi.p.12$proportion ,decreasing=F),]$topic)
+
+m1<-multi.p.12%>%ggplot(aes(x=topic, y=proportion, fill=proportion))+
+  geom_histogram(stat="identity", alpha = 0.8, show.legend = FALSE)+
+  labs(title='Topic Prevalence within Corpus: K = 12', subtitle='Topic Prevalence: manyTopics()', y = 'Proportion (%)', x = 'Topic')+
+  coord_flip()+
+  theme_classic()
+
+# plot k = 12, prevalence & content: optimized model = 1
+
+select.pc.12.1<-tidy(content_prev.model.k12$runout[[1]], matrix = "gamma")%>%
+  select(!document)%>%
+  group_by(topic)%>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0)))%>%
+  mutate(proportion = (gamma/8120)*100)
+
+select.pc.12.1$topic <- factor(select.pc.12.1$topic , levels=select.pc.12.1[order(select.pc.12.1$proportion ,decreasing=F),]$topic)
+
+m2<-select.pc.12.1%>%ggplot(aes(x=topic, y=proportion, fill=proportion))+
+  geom_histogram(stat="identity", alpha = 0.8, show.legend = FALSE)+
+  labs(title='Topic Prevalence: K = 12, Model 1', subtitle='Prevalence & Content: selectModel()', y = 'Proportion (%)', x = 'Topic')+
+  coord_flip()+
+  theme_classic()
+
+# plot k = 12, optimized prevalence & content: run = 2
+
+select.pc.12.2<-tidy(content_prev.model.k12$runout[[2]], matrix = "gamma")%>%
+  select(!document)%>%
+  group_by(topic)%>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0)))%>%
+  mutate(proportion = (gamma/8120)*100)
+
+select.pc.12.2$topic <- factor(select.pc.12.2$topic , levels=select.pc.12.2[order(select.pc.12.2$proportion ,decreasing=F),]$topic)
+
+m3<-select.pc.12.2%>%ggplot(aes(x=topic, y=proportion, fill=proportion))+
+  geom_histogram(stat="identity", alpha = 0.8, show.legend = FALSE)+
+  labs(title='Topic Prevalence: K = 12, Model 2', subtitle='Prevalence & Content: selectModel()', y = 'Proportion (%)', x = 'Topic')+
+  coord_flip()+
+  theme_classic()
+
+# plot k = 12, prevalence & content single model
+
+stm.pc.k12<-tidy(stm.model.k12, matrix = "gamma")%>%
+  select(!document)%>%
+  group_by(topic)%>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0)))%>%
+  mutate(proportion = (gamma/8120)*100)
+
+stm.pc.k12$topic <- factor(stm.pc.k12$topic, levels=stm.pc.k12[order(stm.pc.k12$proportion ,decreasing=F),]$topic)
+
+m4<-stm.pc.k12%>%ggplot(aes(x=topic, y=proportion, fill=proportion))+
+  geom_histogram(stat="identity", alpha = 0.8, show.legend = FALSE)+
+  labs(title='Topic Prevalence: K = 12', subtitle='Prevalence & Content: stm()', y = 'Proportion (%)', x = 'Topic')+
+  coord_flip()+
+  theme_classic()
+
+# plot k = 12, prevalence single model
+
+stm.p.k12<-tidy(stm.p.12, matrix = "gamma")%>%
+  select(!document)%>%
+  group_by(topic)%>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0)))%>%
+  mutate(proportion = (gamma/8120)*100)
+
+stm.p.k12$topic <- factor(stm.p.k12$topic, levels=stm.p.k12[order(stm.p.k12$proportion ,decreasing=F),]$topic)
+
+m5<-stm.p.k12%>%ggplot(aes(x=topic, y=proportion, fill=proportion))+
+  geom_histogram(stat="identity", alpha = 0.8, show.legend = FALSE)+
+  labs(title='Topic Prevalence: K = 12', subtitle='Prevalence: stm()', y = 'Proportion (%)', x = 'Topic')+
+  coord_flip()+
+  theme_classic()
+
+m1|m2|m3|m4|m5
+
+```
+Top words and topic frequency distributions:
+
+
+Four different types of word weightings are printed with labelTopics.
+
+Highest Prob: are the words within each topic with the highest probability (inferred directly from topic-word distribution parameter \betaβ).
+
+FREX: are the words that are both frequent and exclusive, identifying words that distinguish topics. This is calculated by taking the harmonic mean of rank by probability within the topic (frequency) and rank by distribution of topic given word p(z|w=v)p(z∣w=v) (exclusivity). In estimating exclusivity we use a James-Stein type shrinkage estimator of the distribution p(z|w=v)p(z∣w=v). More information can be found in the documentation for the internal function calcfrex and js.estimate.
+
+Score and Lift are measures provided in two other popular text mining packages. For more information on type Score, see the R package lda or the internal function calcscore. For more information on type Lift, see the R package maptpx or or the internal function calclift.
+
+Caution -
+
+stm models using just prevalence formula will display top probability words
+stm models using prevalence and content will display top lift words
+
+```{r}
+
+
+# create and save dataframes for top 10 words per topic and model
+
+l12.a<-labelTopics(stm.model.12, c(1:12), n=10) # printing highest prob
+
+#l12.b<-labelTopics(content_prev.model.k12$runout[[1]], c(1:12), n=10) # printing lift
+
+#l12.c<-labelTopics(stm.model.k12, c(1:12), n=10) # printing lift
+
+l12.d<-labelTopics(stm.p.12, c(1:12), n=10) # printing highest prob
+
+# explore marginal top words
+
+sageLabels(stm.model.12)
+sageLabels(content_prev.model.k12$runout[[1]])
+sageLabels(stm.model.k12) 
+sageLabels(stm.p.12) 
+
+# create tables for top word categories == stm prevalence model
+
+lab12.prob.stm<-l12.d[1]%>%as.data.frame()%>% # will collect top 10 lift terms for each topic
+  add_rownames(var = 'topic')%>%
+  unite(collapse, !1,  remove = FALSE, sep=", ")%>%
+  rename(top_words = collapse)%>%
+  select(topic, top_words)%>%
+  kable(caption = 'Top Topic Words - "Probability": STM Prevalence Model')
+
+lab12.frex.stm<-l12.d[2]%>%as.data.frame()%>% # will collect top 10 lift terms for each topic
+  add_rownames(var = 'topic')%>%
+  unite(collapse, !1,  remove = FALSE, sep=", ")%>%
+  rename(top_words = collapse)%>%
+  select(topic, top_words)%>%
+  kable(caption = 'Top Topic Words - "FREX": STM Prevalence Model')
+
+lab12.lift.stm<-l12.d[3]%>%as.data.frame()%>% # will collect top 10 lift terms for each topic
+  add_rownames(var = 'topic')%>%
+  unite(collapse, !1,  remove = FALSE, sep=", ")%>%
+  rename(top_words = collapse)%>%
+  select(topic, top_words)%>%
+  kable(caption = 'Top Topic Words - "Lift": STM Prevalence Model')
+
+lab12.score.stm<-l12.d[4]%>%as.data.frame()%>% # will collect top 10 lift terms for each topic
+  add_rownames(var = 'topic')%>%
+  unite(collapse, !1,  remove = FALSE, sep=", ")%>%
+  rename(top_words = collapse)%>%
+  select(topic, top_words)%>%
+  kable(caption = 'Top Topic Words - "Score": STM Prevalence Model')
+
+
+#compare tables
+
+lab12.prob.stm
+lab12.frex.stm
+lab12.lift.stm
+lab12.score.stm
+
+
+# another way to plot - plotSTM() cant assign label type to formulas with content
+
+plot.STM(stm.model.12, "labels", topics=c(1:12), width=1200, labeltype ="prob", n=10, main = 'Top Topic Words - "Probability": STM Optimized Prevalence Model') 
+
+plot.STM(stm.p.12, "labels", labeltype ="prob",  width=1200, topics=c(1:12), n=10,  main = 'Top Topic Words - "Probability": STM Prevalence Model') 
+
+# plot distribution of topic proportions -- the two prevalence models produce equivalent results
+
+plot.STM(stm.model.12, "hist", c(1:12), main = 'Frequency Distribution of Topics: STM Prevalence Model')
+
+plot.STM(stm.p.12, "hist", c(1:12), main = 'Frequency Distribution of Topics: STM Prevalence Model')
+
+
+
+
+
+
+```
+Use make.dt to create a data table for the model object that we can run queries against 
+
+Combines the document-topic loadings (theta) with metadata to create a data.table object for easy querying.
+
+```{r}
+#create document table with and meta variables for stm_12
+
+table.meta<- meta%>%
+  select(doc_id, institution, gender, age, race)
+
+
+t.12 <- make.dt(stm.p.12, meta=table.meta)%>%
+  relocate(c(doc_id, institution, gender, age, race), .after=docnum)
+
+
+#find 5 most associated documents for topic 1  
+
+t.12[docnum[order(Topic3, decreasing=TRUE)][1:10]]
+```
+
+Document topic proportions and essays - basic stm model
+
+Plot distribution of words over topics and topics over documents
+
+refs:
+
+https://juliasilge.com/blog/sherlock-holmes-stm/
+https://github.com/fracab/STMIndeed/blob/master/Indeed%20RJupyterNB2b.ipynb
+
+```{r figure.height=20}
+
+
+# distribution of words over topics
+
+tidy_beta<-tidy(stm.p.12) # prob that each word is generated from each topic
+
+# plot top most prevalent words for topic 1 as example
+
+tidy_beta%>%
+  group_by(topic)%>%
+  filter(topic ==8)%>%
+  arrange(desc(beta))%>%
+  slice(1:10)%>%
+  mutate(beta = round(beta*100,2))%>%
+  mutate(term=as.factor(term))%>%
+  mutate(term = fct_reorder(term, beta)) %>%
+  ggplot(aes(x= beta, y=term))+
+  geom_col(fill='midnightblue')+
+  labs(title = 'Top Words in Topic 8: Highest Probability', x= 'Proportion(%)', y = 'Word')+
+  theme_minimal()
+  
+  
+#distribution of topics over documents
+
+tidy_gamma<-tidy(stm.p.12, matrix = "gamma") # prob that each doc is generated from each topic
+
+tidy_gamma%>%
+  filter(document == 1)
+
+# associate docs, topic proportions, metadata
+
+topic_prop12<-make.dt(stm.p.12, meta)
+
+# display data associations
+
+head(topic_prop12)
+
+```
+Plot word clouds
+
+```{r}
+
+
+cloud(stm.p.12, 1)
+
+topics <- c(1,2,3,4,5,6,7,8,9,10,11,12)
+
+for(single.topic in topics){
+  cloud(stm.p.12, single.topic, random.order=FALSE, min.freq=1, max.words=75, rot.per = 0.35, colors=brewer.pal(8, "Dark2"), scale=c(2.5,0.3))
+}
+
+
+wordcloud(words = df$word, freq = df$freq, min.freq = 1,           max.words=200, random.order=FALSE, rot.per=0.35,            colors=brewer.pal(8, "Dark2"))
+
+
+```
+
+Plot topic proportions by document
+
+```{r}
+
+# plot gammas
+
+theta_plots<-tidy_gamma[tidy_gamma$document%in%c(1:9),] # subset data
+
+theta_plots%>%ggplot(aes(y=gamma, x=as.factor(topic), fill = as.factor(topic))) +
+  geom_bar(stat="identity",alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~ document, ncol = 3) +
+  coord_flip()+
+  labs(title = "Topic Proportions By Document (n=8210)", y = expression(theta), x = "Topic")
+```
+
+Perspective plot -- compares word probabilities across 2 topics
+
+```{r}
+#topic comparisons
+
+plot.STM(stm.p.12, "perspectives", topics=c(8,12), n=25, text.cex=1)
+
+plot.STM(stm.p.12, "perspectives", topics=c(11,3), n=25, text.cex=1)
+
+
+```
+
+Evaluate covariate main effects on topics -- 12 topics for this purpose. 
+
+
+*Caution*
+
+This process leverages the meta file to predict prevalence. A model specified for prevalence will produce somewhat different results from one specified for prevalence and content
+
+```{r}
+
+# covariate statistics
+
+gender.pred<-estimateEffect(formula = 1:12 ~ gender, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+
+race.pred<-estimateEffect(formula = 1:12 ~ race, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+
+first.gen.pred<-estimateEffect(formula = 1:12 ~ first_gen, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+
+age.pred<-estimateEffect(formula = 1:12 ~ s(age), stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+
+
+#tidy format - filter for significant effects
+
+tidy(gender.pred)%>%
+  filter(term != '(Intercept)' & p.value < 0.05)
+
+tidy(race.pred)%>%
+  filter(term != '(Intercept)' & p.value < 0.05)
+
+tidy(first.gen.pred)%>%
+  filter(term != '(Intercept)' & p.value < 0.05)
+
+tidy(age.pred)%>%
+  filter(term != '(Intercept)' & p.value < 0.05)
+  
+# summary format -- hash: topics with signf at 0.05
+
+gp<-summary(gender.pred) #1,2,3,5,7,8,9,11,12
+rp<-summary(race.pred) # 2, 4,7,9
+fgp<-summary(first.gen.pred) #7,8,9,12
+ag<-summary(age.pred) # 1, 3, 4, 5, 7, 8, 9, 10, 12
+
+
+
+```
+       
+
+Plot effects - Gender: basic stm model
+
+First Plot - Using first difference type estimate, where topic prevalence for a particular topic is contrasted for two groups
+
+Second Plot - Topical content: plot the influence of covariates as a topical content covariate. A topical content variable allows for the vocabulary used to talk about a particular topic to vary. Note that type = perspective gives the highest probability words.
+
+```{r}
+
+# gender_pred and estimated_pred will produce the same plot
+
+tidy(gender.pred)
+
+plot(gender.pred, covariate = "gender", topics = c(1:12), cex=.25,
+ model = stm.p.12, method = "difference",
+ cov.value1 = "F", cov.value2 = "M",
+ xlab = "More Male ... More Female",
+ main = "Effect of Gender: K=12 Prevalence",
+ xlim = c(-.06, .04), labeltype = "custom",
+ custom.labels = c('Areas for Improvement', 'Developing Writing Skills' ,'Test Anxiety', 'Returning Learners-Degree Completion','Improving Math Skills', 'Confirmation and Readiness', 'Transferable Strategies & Academic Success' ,'Time Management', 'Getting it Right Getting it Done','Adjusting Ones Mindset',
+                   'Appying and Retaining Subject Matter', 'Managing Distractions'))
+
+
+# gender comparison
+
+plot.STM(stm.p.12, "perspectives", topics=(1:12), n=12, text.cex=1,main = 'Gender-Based Vocabulary: Test Anxiety')
+
+
+
+```
+Plot differences in word content by gender 1,2,3,5,7,8,9,11,12
+
+```{r}
+
+#plot k = 12 model, content only
+
+plot.STM(stm.c.12, "perspectives", topics=c(1), n=25, text.cex=1, main = 'Topic 1 = Areas for Improvement')
+plot.STM(stm.c.12, "perspectives", topics=c(2), n=25, text.cex=1, main = 'Topic 2 = Developing Writing Skills')
+plot.STM(stm.c.12, "perspectives", topics=c(3), n=25, text.cex=1, main = 'Topic 3 = Test Anxiety')
+plot.STM(stm.c.12, "perspectives", topics=c(5), n=25, text.cex=1, main = 'Topic 5 = Improving Math Skills')
+plot.STM(stm.c.12, "perspectives", topics=c(7), n=25, text.cex=1, main = 'Topic 7 = Transferable Strategies - Academic Success')
+plot.STM(stm.c.12, "perspectives", topics=c(8), n=25, text.cex=1, main = 'Topic 8 = Time Management')
+plot.STM(stm.c.12, "perspectives", topics=c(9), n=25, text.cex=1, main = 'Topic 9 = Getting Right Getting it Done')
+plot.STM(stm.c.12, "perspectives", topics=c(11), n=25, text.cex=1, main = 'Topic 11 = Applying and Retaining Subject Matter')
+plot.STM(stm.c.12, "perspectives", topics=c(12), n=25, text.cex=1, , main = 'Topic 12 = Managing Distractions')
+
+```
+
+Plot effects - race. Basic stm prevalence model. This section does not include all of the significant effects. See covariate regressions.
+
+```{r}
+
+tidy(race.pred)
+
+plot(race.pred, covariate = "race", topics = c(1:12), cex=.25,
+ model = stm.p.12, method = "difference",
+ cov.value1 = "Black", cov.value2 = "White",
+ xlab = "More White ... More Black or African American",
+ main = "Effect of Race: K=12",
+ xlim = c(-.05, .05), labeltype = "custom",
+ custom.labels = c('Areas for Improvement', 'Developing Writing Skills' ,'Test Anxiety', 'Returning Learners-Degree Completion','Improving Math Skills', 'Confirmation and Readiness', 'Transferable Strategies & Academic Success' ,'Time Management', 'Getting it Right Getting it Done','Adjusting Ones Mindset',
+                   'Appying and Retaining Subject Matter', 'Managing Distractions'))
+
+plot(race.pred, covariate = "race", topics = c(1:12), cex=.25,
+ model = stm.p.12, method = "difference",
+ cov.value1 = "Asian", cov.value2 = "White",
+ xlab = "More White ... More Asian",
+ main = "Effect of Race: K=12",
+ xlim = c(-.05, .05), labeltype = "custom",
+ custom.labels = c('Areas for Improvement', 'Developing Writing Skills' ,'Test Anxiety', 'Returning Learners-Degree Completion','Improving Math Skills', 'Confirmation and Readiness', 'Transferable Strategies & Academic Success' ,'Time Management', 'Getting it Right Getting it Done','Adjusting Ones Mindset',
+                   'Appying and Retaining Subject Matter', 'Managing Distractions'))
+
+plot(race.pred, covariate = "race", topics = c(1:12), cex=.25,
+ model = stm.p.12, method = "difference",
+ cov.value1 = "Latinx", cov.value2 = "White",
+ xlab = "More White ... More Latinx",
+ main = "Effect of Race: K=12",
+ xlim = c(-.05, .05), labeltype = "custom",
+ custom.labels = c('Areas for Improvement', 'Developing Writing Skills' ,'Test Anxiety', 'Returning Learners-Degree Completion','Improving Math Skills', 'Confirmation and Readiness', 'Transferable Strategies & Academic Success' ,'Time Management', 'Getting it Right Getting it Done','Adjusting Ones Mindset',
+                   'Appying and Retaining Subject Matter', 'Managing Distractions'))
+
+```
+
+
+plot effects of first generation covariate - Basic stm prevalence model
+
+```{r}
+tidy(first.gen.pred)
+
+plot(first.gen.pred, covariate = "first_gen", topics = c(1:12), Text.cex=.25,
+ model = stm.p.12, method = "difference",
+ cov.value1 = "FALSE", cov.value2 = "TRUE",
+ xlab = "More First Generation ... Less First Generation",
+ main = "Effect of First Generation",
+ xlim = c(-.04, .02), labeltype = "custom",
+ custom.labels = c('Areas for Improvement', 'Developing Writing Skills' ,'Test Anxiety', 'Returning Learners-Degree Completion','Improving Math Skills', 'Confirmation and Readiness', 'Transferable Strategies & Academic Success' ,'Time Management', 'Getting it Right Getting it Done','Adjusting Ones Mindset',
+                   'Appying and Retaining Subject Matter', 'Managing Distractions'))
+```
+
+Topic prevalence as a function of Age - basic stm prevalence model
+
+Age is a statistically significant covariate for the following topics  1, 3, 4, 5, 7, 8, 9, 10, 12
+
+```{r}
+
+
+plot_age<-function(effect, covariate, topic_num, model){
+  
+  for(i in topic_num){
+    plot(effect, covariate, method = 'continuous', topics = i, model=model, printlegend=FALSE,   #legend True will print the topic number
+xlab = 'Age', main = str_glue('Topic Prevalence as a Function of Age: Topic {i}'))   
+  }
+}
+
+plot_age(age.pred, 'age', c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), stm.model.k12)
+
+
+
+```
+
+Plot age & gender interactions - basic stm prevalence model
+
+```{r}
+
+# build estimate effect formula
+
+interact.signf<-estimateEffect(formula = c(1:12) ~ gender*age, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+
+# evaluate statistical significance of interaction
+
+tidy(interact.signf)%>%
+  filter(term != '(Intercept)' & p.value < 0.1)
+
+# summary format
+
+gender.age<-summary(interact.signf) #2,4,6
+
+# plot the significant interactions of age and gender
+
+c2<-estimateEffect(formula = c(2) ~ gender*age, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+c4<-estimateEffect(formula = c(4) ~ gender*age, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+c6<-estimateEffect(formula = c(6) ~ gender*age, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+
+ 
+# topic 2
+
+
+plot(c2, covariate="age", model=interact , method="continuous", xlab="Age",
+     moderator="gender", moderator.value="M", linecol="blue", ylim=c(0,.1), 
+     printlegend=F, main="Topic 2: Developing Writing Skills (P < 0.10)")
+
+plot(c2, covariate="age", model=interact , method="continuous", xlab="Age",
+     moderator="gender", moderator.value="F", linecol="red", add=T,
+     printlegend=F)
+
+legend(18,.1, c("Male", "Female"), lwd=2, col=c("blue", "red"))
+
+ 
+#topic 4
+
+plot(c4, covariate="age", model=interact , method="continuous", xlab="Age",
+     moderator="gender", moderator.value="M", linecol="blue", ylim=c(.04,.18), 
+     printlegend=F, main="Topic 4. Returning Learners-Degree Completion (P < 0.10)")
+
+plot(c4, covariate="age", model=interact , method="continuous", xlab="Age",
+     moderator="gender", moderator.value="F", linecol="red", add=T,
+     printlegend=F)
+
+legend(18,0.18, c("Male", "Female"), lwd=2, col=c("blue", "red"))
+
+
+#topic 6
+
+plot(c6, covariate="age", model=interact , method="continuous", xlab="Age",
+     moderator="gender", moderator.value="M", linecol="blue", ylim=c(0,.15), 
+     printlegend=F, main="Topic 6: Confirmation and Readiness (P < 0.10)")
+
+plot(c6, covariate="age", model=interact , method="continuous", xlab="Age",
+     moderator="gender", moderator.value="F", linecol="red", add=T,
+     printlegend=F)
+
+legend(18,0.15, c("Male", "Female"), lwd=2, col=c("blue", "red"))
+
+```
+Create network plot for topics. Assign a cutoff threshold of 0.05
+
+See: https://rdrr.io/cran/stm/src/R/topicCorr.R
+
+```{r}
+
+
+
+mod.out.corr <- topicCorr(stm.p.12, method='simple', cutoff =.05) 
+
+plot(mod.out.corr, main='K=12: Topic Network (P < 0.05)', vlabels = c('Areas for Improvement', 'Developing Writing Skills' ,'Test Anxiety', 'Returning Learners-Degree Completion','Improving Math Skills', 'Confirmation and Readiness', 'Transferable Strategies & Academic Success' ,'Time Management', 'Getting it Right Getting it Done','Adjusting Ones Mindset','Appying and Retaining Subject Matter', 'Managing Distractions'),  vertex.label.cex = 0.75, label.color = 'darkred', vertex.color = 'lightblue')
+
+```

@@ -1,0 +1,277 @@
+---
+title: "DAACS - STM Random Forest"
+author: "Sean Connin"
+date: "05/27/22"
+output:
+  html_document: 
+    toc: TRUE
+    toc-title: ""
+    toc_depth: 3
+    toc_float: 
+      collapsed: TRUE
+      smooth_scroll: FALSE
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+    theme: sandstone
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(magrittr)
+library(stm)
+library(randomForest)
+library(tuneR)
+library(vip)
+
+```
+This is an initial inferential exploration of topic proportions and srl component scores/feedback views using Random Forest. 
+
+First, load stm prevalence models for analysis 
+
+```{r}
+
+# load basic stm prevalence model
+
+load('stm.prevalence.models.6_32.Rda')
+
+# disaggregate models
+
+stm.p.6
+stm.p.12
+stm.p.18
+stm.p.24
+stm.p.32
+
+```
+load raw daacs data and subset srl variables
+
+```{r}
+
+# load raw datasets
+
+wgu_data<-load(file = "DAACS-WGU.rda")
+ec_data<-load(file = "DAACS-EC.rda")
+alb_data<-load(file = "DAACS-ualbany.rda")
+
+# subset srl features from daacs datasets 
+
+wgu.srl<-daacs.wgu%>%
+  select(DAACS_ID, srl_grit, srl_strategies, srl_motivation, srl_metacognition, srl_managing_time, srl_managing_environment, srl_anxiety, srl_mindset, srl_self_efficacy, srl_evaluation, srl_planning, srl_help_seeking, srl_understanding, srl_mastery_orientation) %>%
+  rename(doc_id = DAACS_ID)%>%
+  mutate(institution = 'WG')%>%
+  relocate(institution, .after=doc_id)%>%
+  filter(!is.na(srl_strategies))
+
+ec.srl<-daacs.ec%>%
+  select(DAACS_ID, srl_grit, srl_strategies, srl_motivation, srl_metacognition, srl_managing_time, srl_managing_environment, srl_anxiety, srl_mindset, srl_self_efficacy, srl_evaluation, srl_planning, srl_help_seeking, srl_understanding, srl_mastery_orientation) %>%
+  rename(doc_id = DAACS_ID)%>%
+  mutate(institution = 'EC')%>%
+  relocate(institution, .after=doc_id)%>%
+  filter(!is.na(srl_strategies))
+
+alb.srl<-daacs.ualbany%>%
+  select(DAACS_ID, srl_grit, srl_strategies, srl_motivation, srl_metacognition, srl_managing_time, srl_managing_environment, srl_anxiety, srl_mindset, srl_self_efficacy, srl_evaluation, srl_planning, srl_help_seeking, srl_understanding, srl_mastery_orientation) %>%
+  rename(doc_id = DAACS_ID)%>%
+  mutate(srl_grit = case_when(srl_grit %in% NaN ~ NA))%>%
+  mutate(institution = 'Alb')%>%
+  relocate(institution, .after=doc_id)%>%
+  filter(!is.na(srl_strategies))
+
+# create single dataframe for srl features
+
+srl.features<-rbind(wgu.srl, ec.srl, alb.srl)
+
+srl.features%<>%
+  mutate_if(is.numeric, round, digits=2)
+```
+
+load processed corpus
+
+```{r}
+
+#load processed corpus - documents, vocab, meta
+
+processed<-load('processed_corpus_final.Rdata')
+```
+
+Build topic proportion tables
+
+```{r}
+
+# subset doc_id and institution from meta file --> identifiers
+
+table.meta<- meta%>%
+  select(doc_id, institution)
+
+# create topic prevalence tables that includes identifiers
+t.6 <- make.dt(stm.p.6, meta=table.meta)%>%relocate(c(doc_id, institution), .after=docnum)%>%select(!docnum)
+t.12 <- make.dt(stm.p.12, meta=table.meta)%>%relocate(c(doc_id, institution), .after=docnum)%>%select(!docnum)
+t.18 <- make.dt(stm.p.18, meta=table.meta)%>%relocate(c(doc_id, institution), .after=docnum)%>%select(!docnum)
+t.24 <- make.dt(stm.p.24, meta=table.meta)%>%relocate(c(doc_id, institution), .after=docnum)%>%select(!docnum)
+t.32 <- make.dt(stm.p.32, meta=table.meta)%>%relocate(c(doc_id, institution), .after=docnum)%>%select(!docnum)
+
+```
+
+Combine topic proportion and srl variables
+
+```{r}
+# combine topic data and srl covariate data into single dataframe
+
+srl.topics.6<- left_join(srl.features, t.6, by=c('doc_id', 'institution'))
+srl.topics.12<- left_join(srl.features, t.12, by=c('doc_id', 'institution'))
+srl.topics.18<- left_join(srl.features, t.18, by=c('doc_id', 'institution'))
+srl.topics.24<- left_join(srl.features, t.24, by=c('doc_id', 'institution'))
+srl.topics.32<- left_join(srl.features, t.32, by=c('doc_id', 'institution'))
+```
+
+Build Random Forest model for 12 topics. Assess variance in document topic content as explained by srl variable. 
+
+Note: explained variance indicates a range from <1 (modeling noise) -to- ~21%
+
+```{r}
+# Topic 1
+
+t1.12<-srl.topics.12%>%select(Topic1, starts_with('srl'))%>%na.omit() 
+rf.t1.12<-randomForest(Topic1 ~ ., data = t1.12, ntree = 1000, importance = TRUE)
+var.t1.12<-summary(rf.t1.12$rsq*100) # max var explained 8.38
+
+# Topic 2
+
+t2.12<-srl.topics.32%>%select(Topic2, starts_with('srl'))%>%na.omit() 
+rf.t2.12<-randomForest(Topic2 ~ ., data = t2.12, ntree = 1000, importance = TRUE)
+var.t2.12<-summary(rf.t2.12$rsq*100) # max var explained -3.2
+
+# Topic 3
+
+t3.12<-srl.topics.12%>%select(Topic3, starts_with('srl'))%>%na.omit() 
+rf.t3.12<-randomForest(Topic3 ~ ., data = t3.12, ntree = 1000, importance = TRUE)
+var.t3.12<-summary(rf.t3.12$rsq*100) # max var explained 21.4
+
+
+# Topic 4
+
+t4.12<-srl.topics.12%>%select(Topic4, starts_with('srl'))%>%na.omit() 
+rf.t4.12<-randomForest(Topic4 ~ ., data = t4.12, ntree = 1000, importance = TRUE)
+var.t4.12<-summary(rf.t4.12$rsq*100) # max var explained -1.54
+
+# Topic 5
+
+t5.12<-srl.topics.12%>%select(Topic5, starts_with('srl'))%>%na.omit() 
+rf.t5.12<-randomForest(Topic5 ~ ., data = t5.12, ntree = 1000, importance = TRUE)
+var.t5.12<-summary(rf.t5.12$rsq*100)# max var explained -1.04
+
+# Topic 6
+
+t6.12<-srl.topics.12%>%select(Topic6, starts_with('srl'))%>%na.omit() 
+rf.t6.12<-randomForest(Topic6 ~ ., data = t6.12, ntree = 1000, importance = TRUE)
+var.t6.12<-summary(rf.t6.12$rsq*100) # max var explained -3.08
+
+# Topic 7
+
+t7.12<-srl.topics.12%>%select(Topic7, starts_with('srl'))%>%na.omit() 
+rf.t7.12<-randomForest(Topic7 ~ ., data = t7.12, ntree = 1000, importance = TRUE)
+var.t7.12<-summary(rf.t7.12$rsq*100) # max var explained 4.09
+
+
+# Topic 8
+
+t8.12<-srl.topics.12%>%select(Topic8, starts_with('srl'))%>%na.omit() 
+rf.t8.12<-randomForest(Topic8 ~ ., data = t8.12, ntree = 1000, importance = TRUE)
+var.t8.12<-summary(rf.t8.12$rsq*100) # max var explained 1.22
+
+# Topic 9
+
+t9.12<-srl.topics.12%>%select(Topic9, starts_with('srl'))%>%na.omit() 
+rf.t9.12<-randomForest(Topic9 ~ ., data = t9.12, ntree = 1000, importance = TRUE)
+var.t9.12<-summary(rf.t9.12$rsq*100) # max var explained 0.77
+
+# Topic 10
+
+t10.12<-srl.topics.12%>%select(Topic10, starts_with('srl'))%>%na.omit() 
+rf.t10.12<-randomForest(Topic10 ~ ., data = t10.12, ntree = 1000, importance = TRUE)
+var.t10.12<-summary(rf.t10.12$rsq*100) # max var explained 9.65
+
+# Topic 11
+
+t11.12<-srl.topics.12%>%select(Topic11, starts_with('srl'))%>%na.omit() 
+rf.t11.12<-randomForest(Topic11 ~ ., data = t11.12, ntree = 1000, importance = TRUE)
+var.t11.12<-summary(rf.t11.12$rsq*100) # max var explained 1.18
+
+# Topic 12
+
+t12.12<-srl.topics.12%>%select(Topic12, starts_with('srl'))%>%na.omit() 
+rf.t12.12<-randomForest(Topic12 ~ ., data = t12.12, ntree = 1000, importance = TRUE)
+var.t12.12<-summary(rf.t12.12$rsq*100) # max var explained 13.08
+
+# plot importance for 12 topics
+
+
+vip.1 <- vip(rf.t1.12) 
+vip2<-vip(rf.t2.12) 
+vip3<-vip(rf.t3.12) 
+vip4<-vip(rf.t4.12) 
+vip5<-vip(rf.t5.12) 
+vip6<-vip(rf.t6.12) 
+vip7<-vip(rf.t7.12) 
+vip8<-vip(rf.t8.12) 
+vip9<-vip(rf.t9.12) 
+vip10<-vip(rf.t10.12) 
+vip11<-vip(rf.t11.12) 
+vip12<-vip(rf.t12.12) 
+
+```
+Construct dataframes that include Feedback Views (WGU)
+
+```{r}
+
+wgu.views<-daacs.wgu%>%
+  clean_names()%>%
+  select(daacs_id, feedback_views) %>%
+  rename(doc_id = daacs_id)%>%
+  mutate(institution = 'WG')%>%
+  relocate(institution, .after=doc_id)%>%
+  filter(!is.na(feedback_views))
+
+
+feedback.views.12<- left_join(wgu.views, t.12, by=c('doc_id', 'institution'))
+feedback.views.18<- left_join(wgu.views, t.12, by=c('doc_id', 'institution'))
+feedback.views.24<- left_join(wgu.views, t.12, by=c('doc_id', 'institution'))
+feedback.views.32<- left_join(wgu.views, t.12, by=c('doc_id', 'institution'))
+
+
+```
+
+Model feedback views as a response using topics as predictors. Approx 9.5 - 10% of variance explained.
+
+```{r}
+
+
+# Build dataframe for analysis
+
+views12<-feedback.views.12%>%select(feedback_views, starts_with('topic'))%>%na.omit()
+
+#rename columns
+
+views12%<>%
+  rename(c('Areas for Improvement' = Topic1, 'Developing Writing Skills' = Topic2,'Test Anxiety' = Topic3, 'Returning Learners-Degree Completion' = Topic4,'Improving Math Skills'=Topic5, 'Confirmation and Readiness'=Topic6, 'Transferable Strategies & Academic Success' = Topic7 ,'Time Management' = Topic8, 'Getting it Right Getting it Done' = Topic9,'Adjusting Ones Mindset'=Topic10,'Appying and Retaining Subject Matter' = Topic11, 'Managing Distractions'=Topic12))
+
+#clean names
+
+views12%<>%clean_names()
+
+#build Rfortest model
+
+views.model12<-randomForest(feedback_views ~ ., data = views12, ntree = 1000, importance = TRUE) #%var explained 9.8
+
+# plot variable importance based on model results
+
+vip(views.model12)
+```
+

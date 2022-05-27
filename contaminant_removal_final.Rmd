@@ -1,0 +1,108 @@
+---
+title: "DAACS - Contaminate Essays"
+author: "Sean Connin"
+date: "05/27/22"
+output:
+  html_document: 
+    toc: TRUE
+    toc-title: ""
+    toc_depth: 3
+    toc_float: 
+      collapsed: TRUE
+      smooth_scroll: FALSE
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+    theme: sandstone
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The purpose of this file is to identify and remove contamination in the DAACS data set. Removal based on visual inspection of early stm modeling runs. See the preprocess_data file. 
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(stm)
+library(tidytext)
+
+```
+
+import topic probabilities
+
+```{r}
+load('topic.prob6_28.Rdata')
+
+topic1<-t20%>%
+  select(doc_id, Topic1, text)%>%
+  arrange(desc(Topic1))%>%
+  filter(Topic1 >0.15)%>%
+  select(doc_id)
+
+topic7<-t20%>%
+  select(doc_id, Topic7, text)%>%
+  arrange(desc(Topic7))%>%
+  filter(Topic7 >0.15)%>%
+  select(doc_id)
+
+topic18<-t20%>%
+  select(doc_id, Topic18, text)%>%
+  arrange(desc(Topic18))%>%
+  filter(Topic18 >0.15)%>%
+  select(doc_id)
+
+topic19<-t20%>%
+  select(doc_id, Topic19, text)%>%
+  arrange(desc(Topic19))%>%
+  filter(Topic19 >0.15)%>%
+  select(doc_id)
+
+#save(topic7, topic18, topic19, file='remove.topics.Rdata')
+```
+
+```{r}
+essays<-read_csv('preclean_text.csv')
+
+# review topic 7
+
+remove1<-inner_join(topic1, essays, by='doc_id')%>%
+  slice(c(2, 62))%>%
+  select(doc_id, institution)
+
+remove7<-inner_join(topic7, essays, by='doc_id')%>%
+  slice(c(1,5,16,17,20,46,51,81,104,145,237, 260, 299, 379,392, 481))%>%
+  select(doc_id, institution)
+
+remove18<-inner_join(topic18, essays, by='doc_id')%>%
+  slice(c(1,2,3,7,9,11,12,14,15,17,21,26,29,37,40,86,97,148,258,409))%>%
+  select(doc_id, institution)
+
+remove19<-inner_join(topic19, essays, by='doc_id')%>%
+  slice(c(2,4,5,6,7,8,9,10,11:16,19,20))%>%
+  select(doc_id, institution)
+
+remove.id<-rbind(remove1, remove7, remove18, remove19)%>%
+  distinct()
+
+
+# remove additional essays identified in stm_24
+
+doc_id<-c(5711, 4577, 3642, 2437, 9078, 2435, 2974, 9293, 13160, 9152, 8280, 9414, 3674, 6796, 9514, 3727, 13443, 5318, 4312, 5463, 9929, 10094)
+institution<-c('EC', 'WG', 'WG','WG', 'EC', 'EC', 'EC', 'WG', 'WG', 'EC','EC','EC', 'WG','EC', 'WG','WG','WG','EC','EC','EC','EC', 'EC')
+
+temp<-cbind(doc_id, institution)%>%as.data.frame()
+
+remove.id2<-rbind(remove.id, temp)
+
+write.csv(remove.id2, file='remove.csv') 
+
+dim(remove.id2)
+```
+
+End of file
+
+
+

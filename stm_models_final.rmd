@@ -1,0 +1,235 @@
+---
+title: "STM  Models"
+author: 'Sean Connin'
+date: "05/27/22"
+output:
+  html_document: 
+    toc: TRUE
+    toc-title: ""
+    toc_depth: 3
+    toc_float: 
+      collapsed: TRUE
+      smooth_scroll: FALSE
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+    theme: sandstone
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(stm)
+```
+
+Load preprocessed data (.csv format) for additional treatment and partitioning via. stm's textProcessor() function. 
+
+```{r}
+
+# load .csv from local directory
+
+stm_data_final<-read_csv('stm_data_final.csv')
+
+```
+
+The result is a list of four objects: documents, vocab, meta, and docs.removed. The documents object is a list, one per document, of 2 row matrices; the first row indicates the index of a word found in the document, and the second row indicates the (nonzero) counts. If preprocessing causes any documents to be empty, they are removed, as are the corresponding rows of the meta object.
+
+These objects are, in turn, passed to the prepDocuments function, which filters vocabulary, and again removes empty documents and corresponding rows in the metadata (which contains the doc_id, covariates, and text). 
+
+```{r}
+
+set.seed(92200002)
+
+
+# process data -- stopwords, stemming retained, removes other grammatical elements that were removed in preprocess.rmd
+
+processed <- textProcessor(stm_data_final$text, metadata = stm_data_final, removepunctuation = FALSE, removestopwords = TRUE, stem=TRUE, removenumbers = TRUE, striphtml = TRUE)
+
+# partition data as required by stm, remove words that occur in <= 1% of docs and >= 99% of docs
+
+partition <- prepDocuments(processed$documents, processed$vocab, processed$meta, lower.thresh=82, upper.thresh = 8128) 
+ 
+#corpus now has 8210 documents, 12440 words
+
+documents <-partition$documents
+vocab <- partition$vocab
+meta <- partition$meta
+
+# save prepDocuments results to local directory 
+
+#save(documents, vocab, meta, file ="processed_corpus_final.Rdata")  # rda - saves multiple files
+
+```
+
+Build set of models (K = 6 to 32) optimized via. exclusivity & coherence measures using manyTopics(). Note that this function only accepts prevalence models. 
+
+```{r}
+
+
+# Perform model selection across separate STM’s that each assume different numbers of topics
+
+system.time({ 
+
+## elapsed time 2286.47
+
+# build models using manyTopics
+  
+select.models<-manyTopics(documents, vocab, data=meta, K=c(6, 12, 18, 24, 32),
+  prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+  runs=10, init.type = "Spectral", seed=811235359)
+})
+
+# separate models
+
+stm.model.6<-select.models$out[[1]]
+stm.model.12<-select.models$out[[2]]
+stm.model.18<-select.models$out[[3]]
+stm.model.24<-select.models$out[[4]]
+stm.model.32<-select.models$out[[5]]
+
+# save optimized models to local directory
+
+save(stm.model.6, 
+     stm.model.12, 
+     stm.model.18, 
+     stm.model.24, 
+     stm.model.32, 
+     file='optimized.prevalence.models.6_32.Rda')
+
+```
+Due to the fact that manyTopics only enables a prevalence formula, use the stm() method to model both prevalence and content in a single declaration. The method is applied here to models with K = 6 to 32. Similar to manyTopics, an optimized model for each K based on exclusivity and coherence.
+
+In this latter respect, the use of manyTopics is redundant and is included here for comparison. 
+
+```{r}
+
+# fit stm models with content + prevalence formulas
+
+content_prev.model.k6 <- selectModel(documents, vocab, data=meta, K=6,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content=~ gender, max.em.its=75,  runs=10, seed=845815921)
+
+content_prev.model.k12 <- selectModel(documents, vocab, data=meta, K=12,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content=~ gender, max.em.its=75,  runs=10, seed=845815922)
+
+content_prev.model.k18 <- selectModel(documents, vocab, data=meta, K=18, 
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content= ~ gender, max.em.its=75,  runs=10, seed=845815923)
+
+content_prev.model.k24 <- selectModel(documents, vocab, data=meta, K=24, 
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content= ~ gender, max.em.its=75,  runs=10, seed=84581524)
+
+content_prev.model.k32 <- selectModel(documents, vocab, data=meta, K=32,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content=~ gender, max.em.its=75,  runs=10, seed=841158925)
+
+# save content-prevalence (selected) models to local directory
+
+save(content_prev.model.k6,
+     content_prev.model.k12, 
+     content_prev.model.k18, 
+     content_prev.model.k24, 
+     content_prev.model.k32, 
+     file='optimized.prevalence.content.models.6_32.Rda')
+
+# print quick diagnostics
+
+#plotModels(content_prev.model.k6)
+#plotModels(content_prev.model.k12)
+#plotModels(content_prev.model.k18)
+#plotModels(content_prev.model.k24)
+#plotModels(content_prev.model.k32)
+```
+
+Build prevalence & content formula models without optimization: basic stm() method
+
+```{r}
+
+# fit stm models for prevalence & content without optimization
+
+stm.pc.6 <- stm(documents, vocab, data=meta, K=6,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content=~ gender, max.em.its=75, seed=784653)
+
+stm.pc.12 <- stm(documents, vocab, data=meta, K=12,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content=~ gender, max.em.its=75,seed=784654)
+
+stm.pc.18 <- stm(documents, vocab, data=meta, K=18, 
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content= ~ gender, max.em.its=75, seed=784655)
+
+stm.pc.24 <- stm(documents, vocab, data=meta, K=24, 
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content= ~ gender, max.em.its=75, seed=784656)
+
+stm.pc.32 <- stm(documents, vocab, data=meta, K=32,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age),
+                    content=~ gender, max.em.its=75, seed=784657) 
+
+# save stm content-prevalence models to local directory
+
+save(stm.pc.6,
+     stm.pc.12, 
+     stm.pc.18, 
+     stm.pc.24, 
+     stm.pc.32, 
+     file='stm.prevalence.content.models.6_32.Rda')
+```
+Build prevalence formula model without optimization: basic stm() method
+
+```{r}
+
+stm.p.6 <- stm(documents, vocab, data=meta, K=6,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age), init.type = "Spectral", max.em.its=75)
+
+stm.p.12 <- stm(documents, vocab, data=meta, K=12,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age), init.type = "Spectral", max.em.its=75)
+
+stm.p.18 <- stm(documents, vocab, data=meta, K=18,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age), init.type = "Spectral", max.em.its=75)
+
+stm.p.24 <- stm(documents, vocab, data=meta, K=24,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age), init.type = "Spectral", max.em.its=75)
+
+stm.p.32 <- stm(documents, vocab, data=meta, K=32,
+                    prevalence =~ gender + race + first_gen + s(age)+gender*s(age), init.type = "Spectral", max.em.its=75)
+
+
+
+save(stm.p.6, stm.p.12 ,stm.p.18, stm.p.24, stm.p.32, file = 'stm.prevalence.models.6_32.Rda')
+```
+
+Build content formula without optimization:basic stm() method. Use same seed.
+
+```{r}
+
+stm.c.6 <- stm(documents, vocab, data=meta, K=6,
+                    content =~ gender, init.type = "Spectral", max.em.its=75)
+
+stm.c.12 <- stm(documents, vocab, data=meta, K=12,
+                    content =~ gender, init.type = "Spectral", max.em.its=75)
+
+stm.c.18 <- stm(documents, vocab, data=meta, K=18,
+                    content =~ gender, init.type = "Spectral", max.em.its=75)
+
+stm.c.24 <- stm(documents, vocab, data=meta, K=24,
+                    content =~ gender, init.type = "Spectral", max.em.its=75)
+
+stm.c.32 <- stm(documents, vocab, data=meta, K=32,
+                    content =~ gender, init.type = "Spectral", max.em.its=75)
+
+
+
+save(stm.c.6, stm.c.12 ,stm.c.18, stm.c.24, stm.c.32, file = 'stm.content.models.6_32.Rda')
+```
+

@@ -1,0 +1,304 @@
+---
+title: "DAACS - STM Text Processing"
+author: "Sean Connin"
+data: "05/27/22"
+output:
+  html_document: 
+    toc: TRUE
+    toc-title: ""
+    toc_depth: 3
+    toc_float: 
+      collapsed: TRUE
+      smooth_scroll: FALSE
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+    theme: sandstone
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries
+
+```{r}
+library(tidyverse)
+library(httr)
+library(magrittr)
+library(stm)
+library(tidytext)
+library(janitor)
+```
+
+Load data - raw data 
+
+```{r}
+
+wgu_data<-load(file = "DAACS-WGU.rda")
+ec_data<-load(file = "DAACS-EC.rda")
+alb_data<-load(file = "DAACS-ualbany.rda")
+
+```
+
+Process raw essays and save results to home directory. 
+
+```{r}
+
+#subset essays 
+
+wg_essays<-essays.wgu%>%
+  mutate(institution = 'WG')%>%
+  relocate(institution, .after=DAACS_ID)
+ec_essays<-essays.ec%>%
+  mutate(institution = 'EC')%>%
+  relocate(institution, .after=DAACS_ID)
+alb_essays<-essays.ualbany%>%
+  mutate(institution='Alb')%>%
+  relocate(institution, .after=DAACS_ID)
+
+# cleaning patterns
+
+
+pattern1 <- 'what do your self-regulated learning survey results and the feedback tell you about your learning skills'
+pattern2<- 'use results from the survey and the feedback to support your analysis'
+pattern3<-'you received information about your learning skills after you took the self-regulated learning (srl) survey, as well as suggestions for becoming a more effective and efficient learner. now, in order to reflect on your learning skills and receive feedback on your writing, please use the results from your srl survey to do your best writing in a brief essay that answers the questions below.\n\nyou will need to refer to your srl survey results and feedback in your essay. we recommend reviewing them, taking notes, and then returning here to write.\n\nessays must be at least 350 words in order to be meaningfully scored. please aim to write a complete, well-developed essay in order to get accurate feedback about how ready you are for academic writing, and what you can do to strengthen your writing skills'
+pattern4<-'now, in order to reflect on your learning skills and receive feedback on your writing, please use the results from your srl survey to do your best writing in a brief essay that answers the questions below'
+pattern5<-'you will need to refer to your srl survey results and feedback in your essay. we recommend reviewing them, taking notes, and then returning here to write.'
+pattern6<-'essays must be at least 350 words in order to be meaningfully scored' 
+pattern7<-'please aim to write a complete, well-developed essay in order to get accurate feedback about how ready you are for academic writing, and what you can do to strengthen your writing skills'
+pattern8<-'you received information about your learning skills after you took the self-regulated learning (srl) survey, as well as suggestions for becoming a more effective and efficient learner. now, in order to reflect on your learning skills and receive feedback on your writing, please use the results from your srl survey to do your best writing in a brief essay that answers the questions below.'
+pattern9<-'you will need to refer to your srl survey results and feedback in your essay. we recommend reviewing them, taking notes, and then returning here to write.'
+pattern10<-'essays must be at least 350 words in order to be meaningfully scored. please aim to write a complete, well-developed essay in order to get accurate feedback about how ready you are for academic writing, and what you can do to strengthen your writing skills.'
+pattern11<-'which suggested strategies from the feedback are you committed to using this term? explain why you are committed to using those strategies'
+pattern12<-'\\b(i|me|we|my|mine|our|ours|us|myself|ourselves)\\b' #first person pronouns
+pattern13<-"[\\.\\s]" # remove period at end of sentence
+pattern14<-"[\\p{P}\\p{S}--[-]]" # remove remaining punctuation excluding a hyphen
+pattern15<- '([\r\n]|\\\t)' # get rid of returns
+pattern16<- 'self-regulated learning| self regulated learning|self -regulatedlearning|self-regulatedlearning|self-regulated|srl|
+survey|daacss|daacs|selfregulated learning|selfregulated|selfregulating learning|selfregulating|self regulated| self regulating learning|self-regulatedlearning|meta-cognition|metacognition|metacognitive|score|motivation|strategies|survey|results|learning skills|learning survey|wgu|western governors university|excelsior college|excelsior|albany|january| february|march|april|may|june|july|august|septempber|october|november|december' 
+pattern17<- '(\\b\\w\\s|\\s\\w\\s|\\s\\w)\\b'  # remove single char words
+pattern18<-'blah blah'
+pattern19<-'you received information about your'
+pattern20<-'after you took the'
+pattern21<-'as well as suggestions for becoming more effective and efficient learner'
+
+
+# preclean to retain and save raw usable essays for topic labeling downstream
+
+precleaner<-function(x){
+  x%>%
+  select(-attempt)%>%
+  rename(c(doc_id = DAACS_ID, text = essay))%>%
+  na.omit(doc_id)%>%
+  filter %>% distinct(doc_id, .keep_all= TRUE)%>% # remove dups
+  mutate(text=tolower(text))%>%
+  mutate(text = str_remove_all(text, pattern1))%>%
+  mutate(text = str_remove_all(text, pattern2))
+}
+
+wg_preclean<-precleaner(wg_essays)
+ec_preclean<-precleaner(ec_essays)
+alb_preclean<-precleaner(alb_essays)
+
+# rowbind and save data from three schools
+
+preclean_text<-rbind(wg_preclean, ec_preclean, alb_preclean)
+
+#write_csv(preclean_text, 'preclean_text.csv') # write to file for analyses.Rmd
+
+#final cleaning function
+
+cleaner<-function(x){
+  x%>%
+  select(-attempt)%>%
+  rename(c(doc_id = DAACS_ID, text = essay))%>%
+  na.omit(doc_id)%>%
+  filter %>% distinct(doc_id, .keep_all= TRUE)%>% # remove dups
+  mutate(text=tolower(text))%>%
+  mutate(text = str_remove_all(text, pattern1))%>%
+  mutate(text = str_remove_all(text, pattern2))%>%
+  mutate(text = str_replace_all(text, pattern3, ''))%>%
+  mutate(text = str_replace_all(text, pattern4, ''))%>%
+  mutate(text = str_replace_all(text, pattern5, ''))%>%  
+  mutate(text = str_replace_all(text, pattern6, ''))%>%
+  mutate(text = str_replace_all(text, pattern7, ''))%>% 
+  mutate(text = str_replace_all(text, pattern8, ''))%>%
+  mutate(text = str_replace_all(text, pattern9, ''))%>%  
+  mutate(text = str_replace_all(text, pattern10, ''))%>%
+  mutate(text = str_replace_all(text, pattern11, ''))%>%
+  filter(str_detect(text, pattern= pattern12))%>%
+  mutate(text=str_replace_all(text, pattern13, ' '))%>%
+  mutate(text=str_replace_all(text, pattern14, ''))%>%
+  mutate(text=str_remove_all(text, pattern15))%>%
+  mutate(text=str_remove_all(text, pattern16))%>%
+  mutate(count = lengths(map(strsplit(text, split = ' '), unique)))%>% # split and count unique words
+  filter(!count < 50)%>%  # remove essays with less than 50 unique words. A number of essays have repeating sentences
+  select(!count)%>%
+  mutate(text = str_replace_all(text, pattern17, ' '))%>%
+  filter(!str_detect(text, pattern= pattern18))%>%
+  mutate(text = str_replace_all(text, pattern19, ''))%>%
+  mutate(text = str_replace_all(text, pattern20, ''))%>%
+  mutate(text = str_replace_all(text, pattern21, ''))}
+
+wg_clean<-cleaner(wg_essays) 
+ec_clean<-cleaner(ec_essays) 
+alb_clean<-cleaner(alb_essays) 
+
+```
+
+Subset daacs covariates from .rda file and process selected features.
+
+```{r}
+
+# load daacs
+
+wg_covariates<-daacs.wgu%>%clean_names()
+ec_covariates<-daacs.ec%>%clean_names()
+alb_covariates<-daacs.ualbany%>%clean_names()
+
+# establish consistent logicals for first generation student - requires calculation for EC
+
+first.gen.levels<-c('00-UNKNOWN', '01-HS-DNF', '02-HS-GRAD') # select relevant categories
+
+ec_covariates$first_gen<- ec_covariates$highest_ed_lvl_code_mother %in% first.gen.levels & ec_covariates$highest_ed_lvl_code_father %in% first.gen.levels # create logical as new column
+
+ec_covariates[is.na(ec_covariates$highest_ed_lvl_code_mother) & is.na(ec_covariates$highest_ed_lvl_code_father),]$first_gen <-NA # set NA
+
+ec_covariates%<>%
+  mutate(first_gen = as.character(first_gen)) # convert to char
+
+ec_covariates$first_gen <- ec_covariates$first_gen %>% # replace NA with UNKNOWN
+  replace_na('UNKNOWN')
+
+ec_covariates%<>%
+  mutate(first_gen=as.factor(first_gen))
+
+# recode first gen for U. Albany
+
+alb_covariates%<>%
+  mutate(first_gen = case_when(first_gen %in% 'No' ~ 'FALSE',
+                               first_gen %in% 'Yes' ~ 'TRUE',
+                               first_gen %in% 'Unknown' ~ 'UNKNOWN'))%>%
+  mutate(first_gen = as.factor(first_gen))
+
+# wg: rename first_gen_student and convert to factor
+
+wg_covariates%<>%
+  mutate(first_gen = first_gen_student, first_gen = as.factor(first_gen))%>%
+  select(!first_gen_student)%>%
+  mutate(on_time_term1 = as.factor(on_time_term1))
+
+
+# rename successterm1 to on_time_term1 for Excelsior: note there is no such var for Albany
+
+ec_covariates%<>%
+  rename(on_time_term1 =  success_term1, on_time_term2 = success_term2)%>%
+  mutate(on_time_term1 = as.factor(on_time_term1))
+
+# create first_term_ontime1 feature for Alb and set to UNKNOWN
+
+alb_covariates%<>%
+  mutate(on_time_term1 = 'UNKNOWN')%>%
+  mutate(on_time_term1=as.factor(on_time_term1))
+
+
+# daacs cleaner function for race
+
+covariates<-function(x, y){
+  x%<>% 
+  dplyr::select(c(daacs_id, age, gender, y, first_gen, on_time_term1))
+
+  if(y == 'race_ethnicity'){
+    x%<>%separate(race_ethnicity, into=c('race_ethnicity'), extra='drop', sep = ',', remove=TRUE)
+  }
+  x%>%rename(race = y)%>%
+  filter(!race %in% c('Unknown','Unknown/Other','Non-Resident Alien'))%>%
+  rename(c(doc_id = daacs_id))%>%
+  na.omit()%>%
+  mutate(age = as.integer(round(age)))%>%
+  mutate(gender=ifelse(gender %in% c('Female','FEMALE'), 'F', 'M'))%>%
+  mutate(race=str_remove(race, ' non-Hispanic'))%>%
+  mutate(across(race, str_replace, 'Hispanic/Latino', 'Latinx'))%>%
+  mutate(race = str_replace(race, 'Hispanic', 'Latinx'))%>%
+  mutate(race = str_replace(race, 'Black,', 'Black or African American'))%>%
+  mutate(race = str_replace(race, 'Am. Indian or Alaskan Native', 'American Indian or Alaska Native'))%>%
+  mutate(race = str_replace(race, 'Multiple|Two or more races', 'Two or More Races'))%>%
+  mutate(race = str_replace(race, 'Native Hawaiian,', 'Native Hawaiian or Other Pacific Islander'))%>%
+  mutate(across(3:4,as_factor))
+}
+
+wg_covariate<-covariates(wg_covariates, 'ethnicity2')
+
+alb_covariate<-covariates(alb_covariates, 'race_ethnicity')
+
+ec_covariate<-covariates(ec_covariates, 'ethnicity')
+
+```
+
+Join covariate data and processed essays.
+
+```{r}
+
+# join with essays for wg 
+  
+wg_join<-inner_join(wg_covariate, wg_clean, by = "doc_id")
+#wg_join$doc_id = paste0(wg_join$doc_id, '-wg') # add suffix to id
+
+ec_join<-inner_join(ec_covariate, ec_clean, by = "doc_id")
+#ec_join$doc_id = paste0(ec_join$doc_id, '-ec') # add suffix to id
+
+alb_join<-inner_join(alb_covariate, alb_clean, by = "doc_id")
+#alb_join$doc_id = paste0(alb_join$doc_id, '-alb') # add suffix to id
+
+# create combined dataset
+
+clean_data<-rbind(wg_join, ec_join, alb_join)
+
+
+```
+
+Apply a quick qaqc to ensure there are no NA values or text with less than 50 unique words. The latter represents the length of an average paragraph. 
+
+```{r}
+
+# identify any NA vals
+
+clean_data%>%map_dbl(~sum(is.na(.)))
+
+# text with < 50 distinct vals
+
+sum(n_distinct(clean_data$text) < 50)
+```
+
+For STM, limit covariates to gender, race, age, institution
+
+```{r}
+
+
+stm_data<- clean_data%>%
+  select(c(doc_id, institution, gender, race, age, first_gen, on_time_term1, text))%>%
+  unite('Merged', doc_id:institution, remove=FALSE)
+
+# load ids for essays that should be removed -- iterative: see anomalies.rmd
+
+remove.id<-read_csv('remove.csv')%>%
+  as.data.frame()%>%
+  select(doc_id, institution)%>%
+  unite('Merged', doc_id:institution, remove=FALSE)
+
+# subset dataframe to remove flagged essays
+
+stm_data<-anti_join(stm_data, remove.id, by='Merged')%>% 
+  select(!Merged)
+
+
+```
+
+write data to local file for inspection.
+
+```{r}
+stm_data%>%write_csv('stm_data_final.csv')
+```
+

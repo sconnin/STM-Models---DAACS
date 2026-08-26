@@ -1,0 +1,471 @@
+# Code Review — DAACS STM Pipeline
+
+**Reviewed:** 2026-08-26 · **Scope:** all six `.Rmd` files at repo root (1,858 lines) ·
+**Method:** static reading. No code was executed — R is not installed on the review machine, and the
+DAACS data is IRB-protected and was deliberately not opened.
+
+Because nothing was run, findings are stated as **what the code does when read literally**. Items
+marked _needs runtime confirmation_ depend on data values that cannot be inspected without violating
+the IRB constraint; confirm those locally before acting.
+
+One exception: the corpus **schema** was inspected (column names, dimensions, and classes only — no
+row-level content). That confirmed S1-5 and is noted there.
+
+---
+
+## How to use this document
+
+Findings are grouped by severity, and the severity determines the workflow:
+
+| Severity | Meaning | Handling |
+|---|---|---|
+| **S1 — Correctness** | Produces a wrong number or silently corrupts data | Do **not** fix during formatting. Each needs sign-off + a pipeline re-run, because each changes published results. |
+| **S2 — Broken reference** | Code cannot execute as written | Safe to fix — these paths don't currently run, so fixing them breaks nothing that works today. |
+| **S3 — Reproducibility** | Runs, but results can't be regenerated | Fixing changes results (the originals came from unseeded runs and are unrecoverable). Accept and re-run. |
+| **S4 — Style / deprecation / duplication** | No behavior change | Mechanical. Safe to batch into the style and extraction passes. |
+
+Counts: **8 S1 · 5 S2 · 4 S3 · ~9 recurring S4 patterns.**
+
+---
+
+## S1 — Correctness
+
+### S1-1 · Entire `srl_grit` column set to `NA` for Albany
+`stm.rforestmodels.final.Rmd:82`
+
+```r
+mutate(srl_grit = case_when(srl_grit %in% NaN ~ NA))
+```
+
+Two defects in one line. `case_when()` returns `NA` for any row matching **no** branch, and there is
+no `.default`/`TRUE` branch here — so every row where the condition is false also becomes `NA`.
+Separately, `%in% NaN` is not a NaN test: `%in%` uses `match()`, which compares on equality, and
+`NaN` does not compare equal to itself. The condition is therefore false for every row, including
+genuine `NaN`s.
+
+Net effect: `alb.srl$srl_grit` is entirely `NA`. Albany then contributes nothing to `srl_grit` in the
+combined `srl.features` frame (L89), so every random forest that uses `srl_grit` as a predictor is
+fitted on WGU + Excelsior only, silently.
+
+**Recommendation** — express the intent directly, and confirm what the intent actually was. If the
+goal was "convert `NaN` to `NA`":
+
+```r
+mutate(srl_grit = if_else(is.nan(srl_grit), NA_real_, srl_grit))
+```
+
+If Albany simply has no grit measure, drop the column explicitly and document it, rather than nulling
+it in a way that reads like a transformation.
+
+**Verify:** `sum(!is.na(alb.srl$srl_grit))` — expect `0` under the current code.
+
+---
+
+### S1-2 · K=12 topic-2 forest is fitted on the K=32 table
+`stm.rforestmodels.final.Rmd:147`
+
+```r
+t2.12 <- srl.topics.32 %>% select(Topic2, starts_with('srl')) %>% na.omit()
+```
+
+Every other block in this section (L141–211) reads `srl.topics.12`. This one reads `srl.topics.32`
+(defined L131). `Topic2` means a different latent topic in the K=32 model than in the K=12 model, so
+`rf.t2.12` and the reported `var.t2.12` (`# max var explained -3.2`) do not describe what they are
+labeled as describing.
+
+**Recommendation** — change to `srl.topics.12`. This is subsumed by the Phase 4 rewrite of the block
+into a single `map()` over topics, which makes the class of error impossible.
+
+---
+
+### S1-3 · Three of four feedback-view frames are duplicates
+`stm.rforestmodels.final.Rmd:243-246`
+
+```r
+feedback.views.12 <- left_join(wgu.views, t.12, by = c('doc_id', 'institution'))
+feedback.views.18 <- left_join(wgu.views, t.12, ...)   # should be t.18
+feedback.views.24 <- left_join(wgu.views, t.12, ...)   # should be t.24
+feedback.views.32 <- left_join(wgu.views, t.12, ...)   # should be t.32
+```
+
+`.18`, `.24`, and `.32` are byte-identical to `.12`. Currently latent — only `feedback.views.12` is
+consumed downstream (L258) — but the objects exist and are named as though they hold K=18/24/32 data,
+so any future use silently gets K=12.
+
+**Recommendation** — fix the joins, or delete the three unused objects. Don't leave them mislabeled.
+
+---
+
+### S1-4 · Topic-prevalence sums add the NA count to the total
+`stm_analyses_final.Rmd:184, 200, 216, 232, 248`
+
+```r
+summarise(across(everything(), ~ sum(., is.na(.), 0)))
+```
+
+`sum()` is variadic — it adds **all** its arguments. `is.na(.)` is a logical vector, which `sum()`
+coerces to 0/1. So this computes `sum(gamma) + (number of NAs) + 0`, not a sum with NAs removed. The
+trailing `0` does nothing.
+
+Every topic-prevalence proportion computed in this file is inflated by the count of missing values in
+that group. If `gamma` has no NAs the result is coincidentally correct — which is likely why it went
+unnoticed — but the code does not express that assumption, and it is fragile to it changing.
+
+**Recommendation** — `~ sum(.x, na.rm = TRUE)`. If NAs are genuinely impossible here, assert it
+(`stopifnot(!anyNA(gamma))`) rather than relying on it silently.
+
+**Verify:** `tidy(stm.p.12, matrix = "gamma") %>% summarise(n_na = sum(is.na(gamma)))` — if `0`, the
+published proportions are unaffected and this becomes a robustness fix rather than a correction.
+
+---
+
+### S1-5 · Proportion divisor contradicts the recorded corpus size
+`stm_analyses_final.Rmd:185, 201, 217, 233, 249`
+
+```r
+mutate(proportion = (gamma / 8120) * 100)
+```
+
+`stm_models_final.rmd:59` records the corpus as **8210** documents, and this same file labels a plot
+`"Topic Proportions By Document (n=8210)"` at L414. The divisor is `8120` — the same digits
+transposed. One of the two is wrong; a transposition typo is the more likely explanation.
+
+**CONFIRMED.** Loading the corpus and checking `length(documents)` returns **8210**. The divisor
+`8120` is wrong. Every topic-prevalence proportion in these five plots is overstated by a factor of
+8210/8120 — approximately **1.1%** relative.
+
+**Recommendation** — never hardcode N. Derive it:
+
+```r
+n_docs <- n_distinct(tidy_gamma$document)
+mutate(proportion = (gamma / n_docs) * 100)
+```
+
+**Related, same file:** `stm_models_final.rmd:59` records `#corpus now has 8210 documents, 12440
+words`. The document count is right, but the corpus actually holds **1,254** vocabulary terms, not
+12,440. The comment is stale — most likely written before the `lower.thresh`/`upper.thresh` values at
+L57 were last tuned. Since that comment is the only record of what `prepDocuments()` produced, it
+should be replaced with code that prints the real dimensions.
+
+---
+
+### S1-6 · Every non-`Female` gender value becomes `"M"`
+`preprocess_data.rmd:221`
+
+```r
+mutate(gender = ifelse(gender %in% c('Female','FEMALE'), 'F', 'M'))
+```
+
+The `else` branch is unconditional. `NA`, `""`, `"Male"`, `"MALE"`, `"Non-binary"`, `"Prefer not to
+say"`, and any typo or unexpected code all collapse to `"M"`.
+
+Note `na.omit()` runs at L219, before this line, so rows with `NA` gender are already dropped — but
+that protects against exactly one of the failure modes, and only by accident of ordering. Any
+category that is neither of the two literal strings is still silently reassigned. `gender` is a
+covariate in every prevalence model and in the `gender*s(age)` interaction, so a misclassification
+propagates into every reported effect.
+
+**Recommendation** — enumerate the mapping and fail loudly on anything unexpected:
+
+```r
+mutate(gender = case_when(
+  gender %in% c("Female", "FEMALE") ~ "F",
+  gender %in% c("Male",   "MALE")   ~ "M",
+  .default = NA_character_
+))
+# then decide explicitly what happens to the NAs, and record how many there were
+```
+
+**Verify:** `count(wg_covariates, gender)` on each institution before recoding — this reveals whether
+any third category actually exists in the data. _Needs runtime confirmation._
+
+---
+
+### S1-7 · Race recoding is order-dependent and institution-inconsistent
+`preprocess_data.rmd:222-228`, consumed at `stm_analyses_final.Rmd:530, 539, 548`
+
+```r
+mutate(race = str_remove(race, ' non-Hispanic')) %>%
+mutate(across(race, str_replace, 'Hispanic/Latino', 'Latinx')) %>%
+mutate(race = str_replace(race, 'Hispanic', 'Latinx')) %>%
+mutate(race = str_replace(race, 'Black,', 'Black or African American')) %>%
+```
+
+Two problems.
+
+**Order dependence.** L223 and L224 both target "Hispanic"; L224 only behaves correctly because L223
+already consumed the `Hispanic/Latino` case. The chain is correct only in this exact sequence, and
+nothing records that.
+
+**The `'Black,'` pattern requires a trailing comma.** For Albany, `separate(..., sep = ',',
+extra = 'drop')` at L214 has already truncated the value at the first comma — so the comma is gone
+and this replacement cannot match. WGU and Excelsior use different source columns (`ethnicity2`,
+`ethnicity`) and don't go through that `separate()`. The result is plausibly `"Black"` for some
+institutions and `"Black or African American"` for others: two factor levels for one group,
+splitting the sample.
+
+This connects directly to `stm_analyses_final.Rmd:530`, which contrasts `cov.value1 = "Black"`. If
+the recode succeeded, that level doesn't exist and the contrast is invalid; if it failed, it works
+but only for a subset of institutions.
+
+**Recommendation** — replace the chain with one explicit lookup applied uniformly after all
+institution-specific parsing, then assert the resulting level set:
+
+```r
+stopifnot(all(unique(race) %in% RACE_LEVELS))
+```
+
+**Verify:** `levels(factor(meta$race))` and `count(meta, institution, race)`. _Needs runtime
+confirmation — this is the finding most likely to change shape once the real values are visible._
+
+---
+
+### S1-8 · QA check does not perform the check its comment describes
+`preprocess_data.rmd:270-272`
+
+```r
+# text with < 50 distinct vals
+sum(n_distinct(clean_data$text) < 50)
+```
+
+`n_distinct()` on a column returns a **single scalar** (the number of distinct essays, ~8,000).
+Comparing that to 50 gives one `FALSE`; `sum()` of one `FALSE` is `0`. The expression returns `0`
+unconditionally and would do so even if every essay were empty.
+
+The intended check — that no essay has fewer than 50 unique words — is already enforced upstream at
+L136-138 inside `cleaner()`. This block is dead code presenting as verification, which is worse than
+no check: it reads like passing evidence.
+
+**Recommendation** — make it a real assertion or delete it:
+
+```r
+n_short <- sum(lengths(lapply(strsplit(clean_data$text, " "), unique)) < 50)
+stopifnot(n_short == 0)
+```
+
+---
+
+## S2 — Broken references
+
+These prevent execution. Fixing them changes no working behavior.
+
+### S2-1 · Loads two `.Rda` files that are never written
+`essay_examples_final.Rmd:46, 50`
+
+| Loaded | Actually saved by `stm_models_final.rmd` |
+|---|---|
+| `content.prevalence.models.6_32.Rda` | `optimized.prevalence.content.models.6_32.Rda` (L142) |
+| `basic.stm.models.6_32.Rda` | `stm.prevalence.content.models.6_32.Rda` (L186) |
+
+Neither filename exists. Both `load()` calls error.
+
+### S2-2 · `stm.model12` — missing dot
+`essay_examples_final.Rmd:121` · The object created at `stm_models_final.rmd:92` is `stm.model.12`.
+
+### S2-3 · `stm.model.k*` objects are never created anywhere
+`essay_examples_final.Rmd:204, 259-263` · `stm_analyses_final.Rmd:229, 285, 293, 588`
+
+Nine references across two files to `stm.model.k6` / `k12` / `k18` / `k24` / `k32`. No such objects
+are assigned in any file. The nearest real families are `stm.pc.*` (prevalence + content,
+`stm_models_final.rmd:159-177`) and `stm.p.*` (prevalence only, L192-205).
+
+**This one needs a decision, not just a rename** — `stm_analyses_final.Rmd:229` builds `stm.pc.k12`
+from `stm.model.k12` and labels the resulting plot `"Prevalence & Content: stm()"`, which points at
+`stm.pc.12`. Confirm that reading before substituting.
+
+### S2-4 · `model = interact` — undefined object
+`stm_analyses_final.Rmd:621, 625, 634, 638, 647, 651` · The object is `interact.signf` (L600). Six
+call sites.
+
+### S2-5 · `CE6_28` referenced, object is `CE6_32`
+`stm_analyses_final.Rmd:133` · Inside a commented-out `save()`. Harmless today; would fail if
+uncommented. Symptom of a K-range change (6–28 → 6–32) that wasn't propagated.
+
+---
+
+## S3 — Reproducibility
+
+### S3-1 · Ten models fitted without a seed
+`stm_models_final.rmd:192-205` (`stm.p.*`), `216-229` (`stm.c.*`)
+
+Every other model family in the file passes an explicit `seed=` (L86, L117-133, L161-177). These ten
+don't. `stm()` with `init.type = "Spectral"` plus EM is not deterministic without one, so these
+models cannot be regenerated.
+
+This matters more than the count suggests: **`stm.p.12` is the model that most of
+`stm_analyses_final.Rmd` is built on** — the covariate effects (L440-446), the perspective plots, the
+topic network (L665), and the hand-assigned topic labels all derive from it. The labels
+("Test Anxiety", "Time Management", …) were assigned by inspecting a specific fitted model that
+cannot now be reproduced exactly.
+
+**Recommendation** — add seeds, then re-fit and re-verify that the K=12 topics still match the
+assigned labels before reusing them. Treat label re-validation as part of the fix, not an optional
+follow-up.
+
+### S3-2 · No `set.seed()` before any random forest
+`stm.rforestmodels.final.Rmd:141-211, 271`
+
+Thirteen `randomForest()` calls, no seed. The variance-explained figures recorded in comments
+(`# max var explained 8.38`, etc.) and in the prose at L136 and L251 are not reproducible. With
+`ntree = 1000` the run-to-run variation is small but nonzero — and several reported values are near
+zero or negative (`-3.2`, `-1.54`, `-1.04`, `-3.08`), where the sign itself may not be stable.
+
+### S3-3 · Frequency thresholds hardcoded as absolute counts
+`stm_models_final.rmd:57`
+
+```r
+partition <- prepDocuments(..., lower.thresh = 82, upper.thresh = 8128)
+```
+
+The prose at L55 describes these as "words that occur in <= 1% of docs and >= 99% of docs". They are
+absolute document counts that happen to equal ~1% and ~99% of 8,210. They stop meaning that the
+moment the corpus size changes — which it does every time `remove.csv` is regenerated by the
+contaminant-removal loop.
+
+**Recommendation** — derive them: `n <- length(processed$documents); lower.thresh = ceiling(0.01 * n)`.
+
+### S3-4 · Results recorded in comments rather than captured
+`stm.rforestmodels.final.Rmd:143, 149, 155, 161, 167, 173, 180, 187, 193, 199, 205, 211`
+
+```r
+var.t1.12 <- summary(rf.t1.12$rsq * 100)  # max var explained 8.38
+```
+
+The `var.t*` objects are assigned and never used; the actual findings live in trailing comments. They
+can't be sorted, plotted, tabled, or diffed against a re-run, and nothing keeps them in sync with the
+code.
+
+**Recommendation** — collect into a data frame and print it. Falls out naturally from the Phase 4
+`map()` rewrite.
+
+---
+
+## S4 — Style, deprecation, duplication
+
+Mechanical. Safe for the formatting and extraction passes.
+
+### Deprecated / superseded
+
+| Call | Locations | Replacement |
+|---|---|---|
+| `add_rownames()` | `stm_analyses_final.Rmd:299, 306, 313, 320` | `tibble::rownames_to_column()` — deprecated since dplyr 1.0 |
+| `across(race, str_replace, 'x', 'y')` | `preprocess_data.rmd:223` | Passing `...` to `across()` is deprecated in dplyr 1.1; use `across(race, \(x) str_replace(x, "x", "y"))` |
+| `geom_histogram(stat = "identity")` | `stm_analyses_final.Rmd:190, 206, 222, 238, 254` | `geom_col()` |
+| `mutate_if(is.numeric, round, 2)` | `stm.rforestmodels.final.Rmd:92` | `mutate(across(where(is.numeric), \(x) round(x, 2)))` |
+
+### Calling S3 methods directly
+`plot.STM(...)` at `stm_analyses_final.Rmd:337, 339, 343, 345, 422, 424, 499, 510-518` — 13 call
+sites. Call the generic, `plot()`. Directly invoking a method bypasses dispatch and breaks if the
+package reorganizes its S3 registration.
+
+### `setwd()` inside a function, with no restore
+`essay_examples_final.Rmd:103, 145, 185`
+
+```r
+setwd(file.path(mainDir, fname, paste0('Passages_stm.model', number)))
+```
+
+The function never restores the working directory. Every subsequent chunk in the notebook runs
+somewhere else, and a mid-loop error strands the session in a subdirectory. Each of the three
+`exemplars()` definitions repeats it.
+
+**Fix** — build full paths with `file.path()` and pass them to the output device; no directory change
+is needed at all. If one genuinely were, `withr::with_dir()` restores on exit.
+
+### Loop indexes positions when it means values
+`essay_examples_final.Rmd:105, 147, 187, 236`
+
+```r
+for (i in seq_along(topic)) { ... findThoughts(model, topics = i, ...) }
+```
+
+`i` is a **position**, then used as a **topic number**. Correct only because every current caller
+passes `c(1:K)`, where position equals value. `exemplars(model, 6, c(3, 7))` would silently analyze
+topics 1 and 2 while labeling the output "Topic 1"/"Topic 2". Use `for (i in topic)`.
+
+### Shadowing base functions
+`essay_examples_final.Rmd:233` assigns `table <- make.dt(...)`, masking `base::table()`. Then L248
+calls `table()` on a data frame of essay text:
+
+```r
+raw.essays <- inner_join(...) %>% select(text) %>% table()
+```
+
+Given the masked name and that the result feeds `write.table()`, this is very likely not the intended
+operation — worth checking whether it was meant to be `as.data.frame()` or nothing at all.
+_Needs runtime confirmation._
+
+### Dead assignments
+- `index <- findThoughts(...)` — `essay_examples_final.Rmd:110, 152, 192`. A second call identical to
+  the line above it, discarded. Also doubles the work.
+- `examples <- plotQuote(...)` — L111, 153, 193. Assigned, never used.
+- Bare object names as statements — `stm.rforestmodels.final.Rmd:46-50`. Five no-ops.
+- `filter %>%` with no arguments — `preprocess_data.rmd:95, 118`. Pipes the frame through `filter(.)`,
+  which returns it unchanged.
+- `var.t*` — see S3-4.
+
+### Naming
+Three conventions coexist: dot.case (`stm.model.6`, `remove.id2`), snake_case (`clean_data`,
+`first.gen.levels` — itself mixed), and inconsistent numbering (`vip.1` vs `vip2`…`vip12`,
+`essay_examples_final.Rmd`). The Tidyverse Style Guide specifies snake_case throughout. Dot.case is
+actively worth removing in R because it collides with S3 method dispatch naming.
+
+### Assignment pipe
+`%<>%` is used throughout `preprocess_data.rmd` (L169, 175, 180, 188, 196, 202, 210) and
+`stm.rforestmodels.final.Rmd` (L91, 262, 267). The style guide favors explicit `x <- x |> ...`.
+Pick one convention and apply it uniformly.
+
+### Unused dependencies
+- `httr` — `preprocess_data.rmd:28`, `essay_examples_final.Rmd:28`. No HTTP call anywhere.
+- `tuneR` — `stm.rforestmodels.final.Rmd:30`. An **audio processing** package. Almost certainly a
+  mistaken autocomplete for `tune`; nothing from it is called.
+
+### YAML header defects
+- `preprocess_data.rmd:4` — `data: "05/27/22"` should be `date:`.
+- `essay_examples_final.Rmd:4` — `date:: '05/17/22'` has a doubled colon.
+- All six files carry an identical 14-line `output:` block → extract to a shared `_output.yml`.
+
+### File extension inconsistency
+`preprocess_data.rmd` and `stm_models_final.rmd` are lowercase; the other four are `.Rmd`.
+
+---
+
+## Duplication inventory
+
+Drives the Phase 4 extraction. Ordered by payoff.
+
+| Duplicated construct | Occurrences | Location |
+|---|---|---|
+| `randomForest` + `select` + `na.omit` block | **12** | `stm.rforestmodels.final.Rmd:141-211` |
+| `vip()` call | **12** | `stm.rforestmodels.final.Rmd:216-227` |
+| Prevalence formula `~ gender + race + first_gen + s(age) + gender*s(age)` | **15** verbatim | `stm_models_final.rmd` throughout |
+| 12-element `custom.labels` topic vector | **6** verbatim | `stm_analyses_final.Rmd:493, 534, 543, 552, 569, 667` (+ as rename targets `stm.rforestmodels.final.Rmd:263`) |
+| `exemplars()` function definition | **3** near-identical | `essay_examples_final.Rmd:91, 133, 173` |
+| tidy→group→summarise→ggplot prevalence block | **5** | `stm_analyses_final.Rmd:181-259` |
+| `cbind` + `as.numeric(as.character())` diagnostics block | **5** | `stm_analyses_final.Rmd:112-129` |
+| 14-column SRL `select()` | **3** | `stm.rforestmodels.final.Rmd:65-85` |
+| `make.dt()` + `relocate()` block | **5** | `stm.rforestmodels.final.Rmd:114-118` |
+| `left_join` topic/SRL block | **5** | `stm.rforestmodels.final.Rmd:127-131` |
+| `kable()` top-words block | **4** | `stm_analyses_final.Rmd:298-324` |
+| `estimateEffect()` call | **4** | `stm_analyses_final.Rmd:440-446` |
+| Hand-numbered regex globals `pattern1`…`pattern21` | **21** | `preprocess_data.rmd:64-85` |
+
+Two notes on the regex set, for whoever does the extraction:
+
+- `pattern5` and `pattern9` are **byte-identical**.
+- `pattern3` is a superset that already contains the full text of `pattern4`, `pattern5`, `pattern6`,
+  and `pattern7`. Since `pattern3` is applied first (L122), the four that follow are partly redundant
+  — but only partly, because `pattern3` matches the whole block as a unit and the others match
+  fragments that may appear alone. **The order is load-bearing; preserve it and document why.**
+
+---
+
+## Suggested review process going forward
+
+1. One branch and PR per concern, `chore/` → `docs/` → `style/` → `refactor/` → `fix/`.
+2. Formatting PRs must produce **bit-identical** diagnostics (see the baseline capture in the plan).
+   A diff means the "formatting" change wasn't one.
+3. Behavior-changing PRs state up front which reported numbers they invalidate.
+4. `lintr::lint_dir()` clean, or the exception waived in `.lintr` with a comment saying why.
+5. No data artifact reaches a commit — `.gitignore` is the backstop, but check `git status` before
+   staging regardless.

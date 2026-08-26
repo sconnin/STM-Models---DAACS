@@ -43,21 +43,33 @@ Separately, `%in% NaN` is not a NaN test: `%in%` uses `match()`, which compares 
 `NaN` does not compare equal to itself. The condition is therefore false for every row, including
 genuine `NaN`s.
 
-Net effect: `alb.srl$srl_grit` is entirely `NA`. Albany then contributes nothing to `srl_grit` in the
-combined `srl.features` frame (L89), so every random forest that uses `srl_grit` as a predictor is
-fitted on WGU + Excelsior only, silently.
+**CORRECTION — this finding overstated its impact.** Checked against the data:
 
-**Recommendation** — express the intent directly, and confirm what the intent actually was. If the
-goal was "convert `NaN` to `NA`":
-
-```r
-mutate(srl_grit = if_else(is.nan(srl_grit), NA_real_, srl_grit))
+```
+WG   rows=13196  non-NA=6386  NaN=0
+EC   rows=10380  non-NA=2966  NaN=54
+Alb  rows=3941   non-NA=0     NaN=490
 ```
 
-If Albany simply has no grit measure, drop the column explicitly and document it, rather than nulling
-it in a way that reads like a transformation.
+Albany has **zero** usable `srl_grit` values *before this line runs*. The column is already empty, so
+the buggy `case_when()` destroys nothing. The conclusion stands — Albany contributes nothing to
+`srl_grit`, and every forest using it is fitted on WGU + Excelsior only — but the cause is missing
+source data, not this line.
 
-**Verify:** `sum(!is.na(alb.srl$srl_grit))` — expect `0` under the current code.
+The line remains wrong and should still be fixed: it has no fallback branch, and `%in% NaN` cannot
+match anything (`NaN` does not compare equal to itself). It would silently null the column the moment
+Albany data did arrive.
+
+**Recommendation** — say what is actually true. Albany has no grit measure; write that down rather
+than expressing it as a transformation that appears to do something:
+
+```r
+# Albany collects no grit measure; the column is present but empty.
+mutate(srl_grit = NA_real_)
+```
+
+Downgraded from a correctness bug to a latent one: no current impact, guaranteed impact if the data
+changes.
 
 ---
 
@@ -163,14 +175,45 @@ should be replaced with code that prints the real dimensions.
 mutate(gender = ifelse(gender %in% c('Female','FEMALE'), 'F', 'M'))
 ```
 
-The `else` branch is unconditional. `NA`, `""`, `"Male"`, `"MALE"`, `"Non-binary"`, `"Prefer not to
-say"`, and any typo or unexpected code all collapse to `"M"`.
+**CONFIRMED, and materially worse than described. This is the most serious finding in the review.**
 
-Note `na.omit()` runs at L219, before this line, so rows with `NA` gender are already dropped — but
-that protects against exactly one of the failure modes, and only by accident of ordering. Any
-category that is neither of the two literal strings is still silently reassigned. `gender` is a
-covariate in every prevalence model and in the `gender*s(age)` interaction, so a misclassification
-propagates into every reported effect.
+The three institutions do not encode gender the same way:
+
+| Institution | Values | n | Recoded to |
+|---|---|---|---|
+| WGU | `Female` | 7,632 | `F` ✓ |
+| | `Male` | 5,556 | `M` ✓ |
+| | `NA` | 8 | `M` |
+| Excelsior | `FEMALE` | 4,210 | `F` ✓ |
+| | `MALE` | 6,170 | `M` ✓ |
+| **Albany** | **`F`** | **2,088** | **`M`** ✗ |
+| | `M` | 1,853 | `M` ✓ |
+
+**Albany encodes gender as single letters.** `"F"` is not in `c("Female", "FEMALE")`, so the
+unconditional `else` branch sends it to `"M"`.
+
+**Every woman at the University at Albany — 2,088 students, 53% of that institution's sample — is
+recoded as male.** They are not dropped or flagged; they are silently relabelled and then modelled as
+men.
+
+`gender` is a prevalence covariate in every model, the content covariate in the `stm.c.*` family, and
+half of the `gender*s(age)` interaction. It is also the covariate behind the `cov.value1 = "F",
+cov.value2 = "M"` contrast plotted as "Effect of Gender". Every gender result in this analysis is
+computed on data where one institution's women are labelled men.
+
+**Recommendation** — enumerate every encoding actually present, and fail loudly on anything else:
+
+```r
+mutate(gender = case_when(
+  gender %in% c("Female", "FEMALE", "F") ~ "F",
+  gender %in% c("Male",   "MALE",   "M") ~ "M",
+  .default = NA_character_
+))
+stopifnot(!anyNA(gender))  # fail rather than silently reassign
+```
+
+This changes the sample composition of every model and therefore every published gender result. It
+needs a re-fit, and the affected findings need re-checking before they are cited further.
 
 **Recommendation** — enumerate the mapping and fail loudly on anything unexpected:
 
@@ -215,15 +258,44 @@ This connects directly to `stm_analyses_final.Rmd:530`, which contrasts `cov.val
 the recode succeeded, that level doesn't exist and the contrast is invalid; if it failed, it works
 but only for a subset of institutions.
 
-**Recommendation** — replace the chain with one explicit lookup applied uniformly after all
-institution-specific parsing, then assert the resulting level set:
+**CONFIRMED.** Running the recoding chain over each institution's distinct values gives these level
+sets:
+
+| Level after recoding | Present for |
+|---|---|
+| American Indian or Alaska Native | WG, EC |
+| Asian | WG, EC, Alb |
+| **Black** | **WG only** |
+| **Black or African American** | **EC, Alb** |
+| Latinx | WG, EC, Alb |
+| **Native Hawaiian** | **WG only** |
+| **Native Hawaiian or Other Pacific Islander** | **EC only** |
+| Two or More Races | WG, EC, Alb |
+| White | WG, EC, Alb |
+
+**Two groups are split across two labels by institution.** Black students appear as `"Black"` if they
+attend WGU and `"Black or African American"` otherwise. The same split affects Native Hawaiian
+students.
+
+The consequence for `stm_analyses_final.Rmd`: `cov.value1 = "Black"` **does** match a level, so the
+plot renders without error — but it contrasts *WGU Black students only* against White students from
+all three institutions. Institution is confounded with race in that comparison, and nothing on the
+plot says so.
+
+The `str_replace(race, "Black,", ...)` line that was presumably meant to prevent this **never fires
+for any institution**: WGU's value is `"Black"` with no comma, Excelsior's is already
+`"Black or African American"`, and Albany's comma is stripped by the upstream `separate()` before the
+replacement runs. It is dead code that looks like a fix.
+
+**Recommendation** — apply one explicit lookup after all institution-specific parsing, and assert the
+resulting level set so a new encoding fails loudly instead of silently adding a level:
 
 ```r
 stopifnot(all(unique(race) %in% RACE_LEVELS))
 ```
 
-**Verify:** `levels(factor(meta$race))` and `count(meta, institution, race)`. _Needs runtime
-confirmation — this is the finding most likely to change shape once the real values are visible._
+Merging `"Black"` with `"Black or African American"` changes the composition of the race covariate
+and therefore every race result. The three race contrast plots should be re-checked afterwards.
 
 ---
 
@@ -236,8 +308,12 @@ sum(n_distinct(clean_data$text) < 50)
 ```
 
 `n_distinct()` on a column returns a **single scalar** (the number of distinct essays, ~8,000).
-Comparing that to 50 gives one `FALSE`; `sum()` of one `FALSE` is `0`. The expression returns `0`
-unconditionally and would do so even if every essay were empty.
+Comparing that to 50 gives one logical; `sum()` of one logical is 0 or 1.
+
+**CONFIRMED, with a small correction to the original wording.** The expression does not return `0`
+unconditionally — it returns `1` when the corpus holds fewer than 50 distinct essays and `0`
+otherwise. On this corpus it is `0`. Either way it never counts short essays, so it cannot detect the
+condition its comment describes, and would report "pass" if every essay were a single character.
 
 The intended check — that no essay has fewer than 50 unique words — is already enforced upstream at
 L136-138 inside `cleaner()`. This block is dead code presenting as verification, which is worse than

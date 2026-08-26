@@ -1,0 +1,14 @@
+# The .Rmd sources were originally CRLF throughout. The style pass normalized
+# them to LF; this keeps them that way regardless of contributor platform, so
+# the whole-file diff caused by that normalization happens exactly once.
+* text=auto eol=lf
+
+# Binary — never diff, never normalize. These should not be committed at all
+# (see .gitignore), but if one ever is, do not let git mangle it.
+*.Rdata binary
+*.RData binary
+*.Rda   binary
+*.rda   binary
+*.rds   binary
+*.png   binary
+*.pdf   binary

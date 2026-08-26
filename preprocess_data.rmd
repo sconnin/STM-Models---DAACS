@@ -24,7 +24,20 @@ knitr::opts_chunk$set(echo = TRUE)
 Load libraries
 
 ```{r}
-library(tidyverse)
+# The tidyverse core, loaded explicitly rather than through the umbrella
+# package. `library(tidyverse)` also pulls in `ragg`, which needs the
+# harfbuzz/fribidi system libraries -- a build dependency this analysis never
+# uses, and one that makes the project fail to install on a clean machine.
+# These are the same namespaces `library(tidyverse)` attaches, minus
+# `lubridate` (no date handling anywhere in the pipeline).
+library(dplyr)
+library(ggplot2)
+library(tibble)
+library(tidyr)
+library(readr)
+library(purrr)
+library(stringr)
+library(forcats)
 library(magrittr)
 library(stm)
 library(tidytext)
@@ -301,13 +314,23 @@ clean_data %>% map_dbl(~ sum(is.na(.)))
 # single logical, and the sum is 0 or 1 regardless of how short any essay is. It
 # would have reported "pass" if every essay were a single character.
 #
-# cleaner() already enforces the >= 50 unique-word rule, so this is an assertion
-# that the filter did its job, not a filter in its own right.
-n_short_essays <- sum(
-  lengths(lapply(strsplit(clean_data$text, " "), unique)) < 50
+# This reports rather than asserts, because the floor is NOT guaranteed of the
+# final text. cleaner() counts unique words and filters at one point in its
+# chain, but four more substitutions run afterwards (pattern17, 19, 20, 21).
+# An essay can clear the threshold when it is measured and fall below it once
+# those strip further text, so a non-zero count here is expected, not a failure.
+# See CODE_REVIEW.md S1-9: moving the filter to the end of the chain would drop
+# additional essays and change the corpus, which is a modelling decision rather
+# than a QA fix.
+n_unique_words <- lengths(lapply(strsplit(clean_data$text, " "), unique))
+n_short_essays <- sum(n_unique_words < 50)
+
+cat(
+  "essays below the 50-unique-word floor in the FINAL text:",
+  n_short_essays, "of", nrow(clean_data),
+  sprintf("(%.2f%%)\n", 100 * n_short_essays / nrow(clean_data))
 )
-stopifnot(n_short_essays == 0)
-cat("essays below the 50-unique-word floor:", n_short_essays, "\n")
+cat("  fewest unique words in any retained essay:", min(n_unique_words), "\n")
 ```
 
 For STM, limit covariates to gender, race, age, institution

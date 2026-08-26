@@ -24,7 +24,20 @@ knitr::opts_chunk$set(echo = TRUE)
 load libraries
 
 ```{r}
-library(tidyverse)
+# The tidyverse core, loaded explicitly rather than through the umbrella
+# package. `library(tidyverse)` also pulls in `ragg`, which needs the
+# harfbuzz/fribidi system libraries -- a build dependency this analysis never
+# uses, and one that makes the project fail to install on a clean machine.
+# These are the same namespaces `library(tidyverse)` attaches, minus
+# `lubridate` (no date handling anywhere in the pipeline).
+library(dplyr)
+library(ggplot2)
+library(tibble)
+library(tidyr)
+library(readr)
+library(purrr)
+library(stringr)
+library(forcats)
 library(magrittr)
 library(stm)
 library(igraph) # network graph
@@ -515,10 +528,19 @@ Plot effects - race. Basic stm prevalence model. This section does not include a
 ```{r}
 tidy(race.pred)
 
+# Guard the contrast values against the levels that actually exist. Before the
+# S1-7 harmonisation, WGU wrote "Black" while the other institutions wrote
+# "Black or African American", so the group occupied two levels and this plot
+# contrasted only WGU's half of it. The levels are now merged, which means the
+# literal "Black" no longer matches anything -- estimateEffect() would contrast
+# against a level that is not there.
+race_levels <- levels(as.factor(meta$race))
+stopifnot(all(c("Black or African American", "Asian", "Latinx", "White") %in% race_levels))
+
 plot(race.pred,
   covariate = "race", topics = c(1:12), cex = .25,
   model = stm.p.12, method = "difference",
-  cov.value1 = "Black", cov.value2 = "White",
+  cov.value1 = "Black or African American", cov.value2 = "White",
   xlab = "More White ... More Black or African American",
   main = "Effect of Race: K=12",
   xlim = c(-.05, .05), labeltype = "custom",

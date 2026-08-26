@@ -49,15 +49,37 @@ set.seed(92200002)
 
 processed <- textProcessor(stm_data_final$text, metadata = stm_data_final, removepunctuation = FALSE, removestopwords = TRUE, stem = TRUE, removenumbers = TRUE, striphtml = TRUE)
 
-# partition data as required by stm, remove words that occur in <= 1% of docs and >= 99% of docs
-
-partition <- prepDocuments(processed$documents, processed$vocab, processed$meta, lower.thresh = 82, upper.thresh = 8128)
-
-# corpus now has 8210 documents, 12440 words
+# Partition as stm requires, dropping words that occur in <= 1% or >= 99% of
+# documents.
+#
+# The thresholds stay hard-coded at 82 / 8128 DELIBERATELY. They are described in
+# prose as 1% and 99%, and stopped meaning that the moment the corpus size
+# changed (CODE_REVIEW.md S3-3) -- but deriving them now would alter the
+# vocabulary and therefore every fitted model. That is a larger change than the
+# correctness fixes in this batch, and it would confound attribution when the
+# models are re-fitted. The report below makes the drift visible; converting
+# them to derived values is a separate decision.
+partition <- prepDocuments(
+  processed$documents, processed$vocab, processed$meta,
+  lower.thresh = 82, upper.thresh = 8128
+)
 
 documents <- partition$documents
 vocab <- partition$vocab
 meta <- partition$meta
+
+# Report the real dimensions rather than recording them in a comment that goes
+# stale. The previous comment claimed "8210 documents, 12440 words"; the corpus
+# actually holds 1,254 vocabulary terms, so the word count had been wrong for
+# some time (CODE_REVIEW.md S1-5).
+n_input <- length(processed$documents)
+cat(
+  "corpus:", length(documents), "documents,", length(vocab), "vocabulary terms\n",
+  "thresholds 82/8128 represent",
+  sprintf("%.2f%%", 100 * 82 / n_input), "and",
+  sprintf("%.2f%%", 100 * 8128 / n_input),
+  "of the", n_input, "documents entering prepDocuments()\n"
+)
 
 # save prepDocuments results to local directory
 

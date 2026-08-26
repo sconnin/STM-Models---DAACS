@@ -243,7 +243,13 @@ covariates <- function(x, y) {
   x %>%
     dplyr::select(c(daacs_id, age, gender, all_of(y), first_gen, on_time_term1)) %>%
     rename(race = all_of(y)) %>%
-    filter(!race %in% EXCLUDED_RACE_VALUES) %>%
+    # Compare the stripped form, not the raw string. Albany writes
+    # "Unknown, non-Hispanic"; the raw value matches no entry in
+    # EXCLUDED_RACE_VALUES, so filtering it directly would carry the row
+    # through to recode_race() and halt the pipeline on a category that was
+    # always meant to be dropped. The original achieved this by running
+    # separate() before the filter. See race_base_value() in R/covariate_levels.R.
+    filter(!race_base_value(race) %in% EXCLUDED_RACE_VALUES) %>%
     rename(c(doc_id = daacs_id)) %>%
     na.omit() %>%
     mutate(age = as.integer(round(age))) %>%
@@ -287,9 +293,21 @@ Apply a quick qaqc to ensure there are no NA values or text with less than 50 un
 
 clean_data %>% map_dbl(~ sum(is.na(.)))
 
-# text with < 50 distinct vals
-
-sum(n_distinct(clean_data$text) < 50)
+# Essays below the unique-word floor.
+#
+# The previous check was `sum(n_distinct(clean_data$text) < 50)`, which does not
+# do what its comment claimed (CODE_REVIEW.md S1-8). n_distinct() returns ONE
+# number for the whole column -- around 8,000 -- so comparing it to 50 gives a
+# single logical, and the sum is 0 or 1 regardless of how short any essay is. It
+# would have reported "pass" if every essay were a single character.
+#
+# cleaner() already enforces the >= 50 unique-word rule, so this is an assertion
+# that the filter did its job, not a filter in its own right.
+n_short_essays <- sum(
+  lengths(lapply(strsplit(clean_data$text, " "), unique)) < 50
+)
+stopifnot(n_short_essays == 0)
+cat("essays below the 50-unique-word floor:", n_short_essays, "\n")
 ```
 
 For STM, limit covariates to gender, race, age, institution

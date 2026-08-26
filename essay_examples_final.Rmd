@@ -42,11 +42,11 @@ processed <- load("processed_corpus_final.Rdata")
 
 load("optimized.prevalence.models.6_32.Rda") # e.g., optimized prevalence: stm.model.12
 
-load("content.prevalence.models.6_32.Rda") # e.g.,     # optimized prevalence & content: content_prev.model.k12
+load("optimized.prevalence.content.models.6_32.Rda") # e.g.,     # optimized prevalence & content: content_prev.model.k12
 
 # load prevalence & content models (stm())
 
-basic.stm <- load("basic.stm.models.6_32.Rda")
+basic.stm <- load("stm.prevalence.content.models.6_32.Rda")
 ```
 
 Filter raw DAACS essays using the processed meta file doc_id & institution column identifiers. This will exclude essays removed as part of the filtering process.
@@ -110,7 +110,7 @@ exemplars <- function(model, number, topic) {
   }
 }
 
-exemplars(stm.model12, 12, c(1:12)) # number is our model number, topic is list of topics
+exemplars(stm.model.12, 12, c(1:12)) # number is our model number, topic is list of topics
 ```
 
 Repeat this process for content & prevalence to determine if there are any differences
@@ -184,7 +184,7 @@ exemplars <- function(model, number, topic) {
 }
 
 
-exemplars(stm.model.k32, 32, c(1:32)) # number is our model number, topic is list of topics
+exemplars(stm.pc.32, 32, c(1:32)) # number is our model number, topic is list of topics
 ```
 
 Write top 5 representative essays (raw data) by model and topic to file. Note, the essays extracted here come from the basic stm models - which include prevalence and content formula. The decision to use this set of files owes to results and downstream analyses described in the file analyses6_32.
@@ -233,9 +233,9 @@ top.essays <- function(model, K, id, topic, raw.data) {
 
 # write top 5 representative essays for each model and topic to file
 
-top.essays(stm.model.k6, 6, identifiers, c(1:6), original)
-top.essays(stm.model.k12, 12, identifiers, c(1:12), original)
-top.essays(stm.model.k18, 18, identifiers, c(1:18), original)
-top.essays(stm.model.k24, 24, identifiers, c(1:24), original)
-top.essays(stm.model.k32, 32, identifiers, c(1:32), original)
+top.essays(stm.pc.6, 6, identifiers, c(1:6), original)
+top.essays(stm.pc.12, 12, identifiers, c(1:12), original)
+top.essays(stm.pc.18, 18, identifiers, c(1:18), original)
+top.essays(stm.pc.24, 24, identifiers, c(1:24), original)
+top.essays(stm.pc.32, 32, identifiers, c(1:32), original)
 ```

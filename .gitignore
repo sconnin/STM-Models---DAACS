@@ -44,14 +44,9 @@ Passages-*/
 .Renviron
 *.Rcheck/
 
-# renv: keep the lockfile, ignore the local library
-renv/library/
-renv/local/
-renv/cellar/
-renv/lock/
-renv/python/
-renv/sandbox/
-renv/staging/
+# renv manages its own exclusions in renv/.gitignore (library/, staging/, etc.).
+# renv.lock, .Rprofile, renv/activate.R and renv/settings.json ARE committed --
+# they are what makes the environment reproducible.
 
 # ---------------------------------------------------------------------------
 # OS

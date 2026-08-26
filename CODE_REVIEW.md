@@ -281,6 +281,23 @@ call sites.
 `stm_analyses_final.Rmd:133` · Inside a commented-out `save()`. Harmless today; would fail if
 uncommented. Symptom of a K-range change (6–28 → 6–32) that wasn't propagated.
 
+### S2-6 · Empty argument passed via a doubled comma
+`stm_analyses_final.Rmd:497` (was L518 pre-style-pass)
+
+```r
+plot(stm.c.12, "perspectives", topics = c(12), n = 25, text.cex = 1, , main = "...")
+```
+
+Note `1, , main`. R parses this — an empty argument is syntactically legal and becomes the *missing*
+value — so it survives `parse()` and was not caught by any linter. It reaches `plot.STM()`'s `...`,
+where it errors as soon as anything forces it.
+
+Found while verifying the style pass; only the last of the nine `"perspectives"` calls in that block
+has it, so it looks like a stray keystroke rather than intent.
+
+**Recommendation** — delete the extra comma. Mechanical and safe, but listed under S2 rather than S4
+because it is a defect rather than a style choice.
+
 ---
 
 ## S3 — Reproducibility
@@ -344,6 +361,22 @@ code.
 
 Mechanical. Safe for the formatting and extraction passes.
 
+**Status after the style pass** (branch `style/tidyverse-style-pass`): lint findings went 2312 → 662.
+Resolved there: all whitespace/formatting classes, the four deprecated calls, the 13 direct
+`plot.STM()` invocations, the `T`/`F` symbols, and the two YAML header typos.
+
+Still open, and why:
+
+| Remaining | Count | Held because |
+|---|---|---|
+| `object_name_linter` (dot.case) | 133 | `save()`/`load()` couple object names across files — see below |
+| `pipe_consistency_linter` | 239 | `%>%` vs `\|>` is a one-time convention decision; pairs naturally with removing `%<>%` |
+| `object_usage_linter` | 172 | These *are* S2/S3 findings — undefined objects and dead assignments |
+| `line_length_linter` | 90 | Mostly the 21 regex patterns and the repeated 12-element label vector; resolved by the Phase 4 extraction |
+| `commented_code_linter` | 14 | Judgment call per site — some are documentation, some are dead code |
+| `assignment_linter` | 10 | The `%<>%` sites; decide alongside pipe consistency |
+| `undesirable_function_linter` | 4 | The three unrestored `setwd()` calls in `exemplars()` plus one more; fixed by the Phase 4 extraction |
+
 ### Deprecated / superseded
 
 | Call | Locations | Replacement |
@@ -404,11 +437,35 @@ _Needs runtime confirmation._
   which returns it unchanged.
 - `var.t*` — see S3-4.
 
-### Naming
+### Naming — and why it cannot be fixed in a style pass
 Three conventions coexist: dot.case (`stm.model.6`, `remove.id2`), snake_case (`clean_data`,
 `first.gen.levels` — itself mixed), and inconsistent numbering (`vip.1` vs `vip2`…`vip12`,
 `essay_examples_final.Rmd`). The Tidyverse Style Guide specifies snake_case throughout. Dot.case is
 actively worth removing in R because it collides with S3 method dispatch naming.
+
+**But renaming is not a behavior-preserving change here**, which is not obvious and is the reason
+`object_name_linter`'s 133 findings were left open by the style pass.
+
+`save()` serializes objects *by name*, and `load()` restores those exact names into the global
+environment. So `stm.p.12` is not a local variable — it is a contract between files, mediated
+through a `.Rda` on disk:
+
+```r
+# stm_models_final.rmd:209  — writes the name
+save(stm.p.6, stm.p.12, stm.p.18, stm.p.24, stm.p.32,
+     file = "stm.prevalence.models.6_32.Rda")
+
+# stm.rforestmodels.final.Rmd:42  — reads the name back
+load("stm.prevalence.models.6_32.Rda")
+```
+
+Rename `stm.p.12` → `stm_p_12` in the fitting notebook and the `.Rda` files already on disk still
+contain `stm.p.12`. Every downstream `load()` would restore the old name while the code referenced
+the new one — a failure that appears only at runtime, in a different file from the edit.
+
+Making the rename real requires re-fitting and re-saving every model. **Phase 5 forces that anyway**
+to fix the missing seeds (S3-1), so the rename belongs there, bundled with the re-fit — not in a
+formatting pass that is supposed to change nothing.
 
 ### Assignment pipe
 `%<>%` is used throughout `preprocess_data.rmd` (L169, 175, 180, 188, 196, 202, 210) and

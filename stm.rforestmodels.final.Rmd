@@ -84,7 +84,14 @@ ec.srl <- daacs.ec %>%
 alb.srl <- daacs.ualbany %>%
   select(DAACS_ID, srl_grit, srl_strategies, srl_motivation, srl_metacognition, srl_managing_time, srl_managing_environment, srl_anxiety, srl_mindset, srl_self_efficacy, srl_evaluation, srl_planning, srl_help_seeking, srl_understanding, srl_mastery_orientation) %>%
   rename(doc_id = DAACS_ID) %>%
-  mutate(srl_grit = case_when(srl_grit %in% NaN ~ NA)) %>%
+  # Albany collects no grit measure: 3,941 rows, 0 non-NA, 490 NaN. Stated
+  # directly rather than through a case_when() that appears to transform
+  # something. The previous line -- case_when(srl_grit %in% NaN ~ NA) -- had no
+  # fallback branch and used `%in% NaN`, which never matches because NaN does
+  # not compare equal to itself. It destroyed nothing only because the column
+  # was already empty; it would have emptied it the moment data arrived.
+  # See CODE_REVIEW.md S1-1.
+  mutate(srl_grit = NA_real_) %>%
   mutate(institution = "Alb") %>%
   relocate(institution, .after = doc_id) %>%
   filter(!is.na(srl_strategies))

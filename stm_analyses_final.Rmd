@@ -177,13 +177,26 @@ It is possible to create a topic prevalence plot using models built on prevalenc
 Note that the results will also be different from the optimized model built on prevalence formula alone, owing to different initializations and model selection. 
 
 ```{r}
+# Each document's topic proportions sum to 1, so summing gamma across documents
+# and dividing by the document count gives the mean proportion per topic.
+#
+# Two corrections here (CODE_REVIEW.md S1-4, S1-5), both of which change every
+# proportion these five blocks plot:
+#
+#   - The divisor was hard-coded as 8120. The corpus holds 8210 documents --
+#     the same digits transposed. It is now derived, and asserted against the
+#     value recorded when the corpus was built.
+#   - The sum was written `sum(., is.na(.), 0)`. sum() is variadic, so that
+#     added the COUNT OF NAs to the total rather than removing them.
+n_documents <- length(documents)
+stopifnot(n_documents == 8210)
+
 # plot k = 12, optimized prevalence formula
 
 multi.p.12 <- tidy(stm.model.12, matrix = "gamma") %>%
-  select(!document) %>%
   group_by(topic) %>%
-  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
-  mutate(proportion = (gamma / 8120) * 100)
+  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
+  mutate(proportion = (gamma / n_documents) * 100)
 
 multi.p.12$topic <- factor(multi.p.12$topic, levels = multi.p.12[order(multi.p.12$proportion, decreasing = FALSE), ]$topic)
 
@@ -196,10 +209,9 @@ m1 <- multi.p.12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
 # plot k = 12, prevalence & content: optimized model = 1
 
 select.pc.12.1 <- tidy(content_prev.model.k12$runout[[1]], matrix = "gamma") %>%
-  select(!document) %>%
   group_by(topic) %>%
-  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
-  mutate(proportion = (gamma / 8120) * 100)
+  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
+  mutate(proportion = (gamma / n_documents) * 100)
 
 select.pc.12.1$topic <- factor(select.pc.12.1$topic, levels = select.pc.12.1[order(select.pc.12.1$proportion, decreasing = FALSE), ]$topic)
 
@@ -212,10 +224,9 @@ m2 <- select.pc.12.1 %>% ggplot(aes(x = topic, y = proportion, fill = proportion
 # plot k = 12, optimized prevalence & content: run = 2
 
 select.pc.12.2 <- tidy(content_prev.model.k12$runout[[2]], matrix = "gamma") %>%
-  select(!document) %>%
   group_by(topic) %>%
-  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
-  mutate(proportion = (gamma / 8120) * 100)
+  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
+  mutate(proportion = (gamma / n_documents) * 100)
 
 select.pc.12.2$topic <- factor(select.pc.12.2$topic, levels = select.pc.12.2[order(select.pc.12.2$proportion, decreasing = FALSE), ]$topic)
 
@@ -228,10 +239,9 @@ m3 <- select.pc.12.2 %>% ggplot(aes(x = topic, y = proportion, fill = proportion
 # plot k = 12, prevalence & content single model
 
 stm.pc.k12 <- tidy(stm.pc.12, matrix = "gamma") %>%
-  select(!document) %>%
   group_by(topic) %>%
-  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
-  mutate(proportion = (gamma / 8120) * 100)
+  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
+  mutate(proportion = (gamma / n_documents) * 100)
 
 stm.pc.k12$topic <- factor(stm.pc.k12$topic, levels = stm.pc.k12[order(stm.pc.k12$proportion, decreasing = FALSE), ]$topic)
 
@@ -244,10 +254,9 @@ m4 <- stm.pc.k12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
 # plot k = 12, prevalence single model
 
 stm.p.k12 <- tidy(stm.p.12, matrix = "gamma") %>%
-  select(!document) %>%
   group_by(topic) %>%
-  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
-  mutate(proportion = (gamma / 8120) * 100)
+  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
+  mutate(proportion = (gamma / n_documents) * 100)
 
 stm.p.k12$topic <- factor(stm.p.k12$topic, levels = stm.p.k12[order(stm.p.k12$proportion, decreasing = FALSE), ]$topic)
 

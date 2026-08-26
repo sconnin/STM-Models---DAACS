@@ -71,6 +71,9 @@ mutate(srl_grit = NA_real_)
 Downgraded from a correctness bug to a latent one: no current impact, guaranteed impact if the data
 changes.
 
+**RESOLVED** — replaced with `mutate(srl_grit = NA_real_)`, which states the fact directly. No result
+change: the column was already empty.
+
 ---
 
 ### S1-2 · K=12 topic-2 forest is fitted on the K=32 table
@@ -133,8 +136,9 @@ unnoticed — but the code does not express that assumption, and it is fragile t
 **Recommendation** — `~ sum(.x, na.rm = TRUE)`. If NAs are genuinely impossible here, assert it
 (`stopifnot(!anyNA(gamma))`) rather than relying on it silently.
 
-**Verify:** `tidy(stm.p.12, matrix = "gamma") %>% summarise(n_na = sum(is.na(gamma)))` — if `0`, the
-published proportions are unaffected and this becomes a robustness fix rather than a correction.
+**RESOLVED** — the five blocks now use `summarise(gamma = sum(gamma, na.rm = TRUE))`. Whether any
+proportion actually moves depends on whether `gamma` contains NAs, which the re-fit will show; either
+way the code no longer depends on an unstated assumption.
 
 ---
 
@@ -160,11 +164,12 @@ n_docs <- n_distinct(tidy_gamma$document)
 mutate(proportion = (gamma / n_docs) * 100)
 ```
 
-**Related, same file:** `stm_models_final.rmd:59` records `#corpus now has 8210 documents, 12440
-words`. The document count is right, but the corpus actually holds **1,254** vocabulary terms, not
-12,440. The comment is stale — most likely written before the `lower.thresh`/`upper.thresh` values at
-L57 were last tuned. Since that comment is the only record of what `prepDocuments()` produced, it
-should be replaced with code that prints the real dimensions.
+**RESOLVED** — the divisor is now `n_documents <- length(documents)`, asserted equal to 8210. Every
+proportion in these five plots moves by a factor of 8210/8120, roughly **1.1% downward**.
+
+**Related, same file:** `stm_models_final.rmd` recorded `#corpus now has 8210 documents, 12440 words`.
+The document count is right; the corpus actually holds **1,254** vocabulary terms. **RESOLVED** — the
+comment is replaced by code that prints the real dimensions, so it cannot go stale again.
 
 ---
 
@@ -342,12 +347,8 @@ The intended check — that no essay has fewer than 50 unique words — is alrea
 L136-138 inside `cleaner()`. This block is dead code presenting as verification, which is worse than
 no check: it reads like passing evidence.
 
-**Recommendation** — make it a real assertion or delete it:
-
-```r
-n_short <- sum(lengths(lapply(strsplit(clean_data$text, " "), unique)) < 50)
-stopifnot(n_short == 0)
-```
+**RESOLVED** — replaced with a real count plus `stopifnot()`. `cleaner()` already enforces the rule,
+so this now asserts the filter did its job rather than pretending to be the filter.
 
 ---
 
@@ -466,6 +467,11 @@ moment the corpus size changes — which it does every time `remove.csv` is rege
 contaminant-removal loop.
 
 **Recommendation** — derive them: `n <- length(processed$documents); lower.thresh = ceiling(0.01 * n)`.
+
+**DELIBERATELY NOT CHANGED.** Deriving them would alter the vocabulary and therefore every fitted
+model — a larger change than the correctness batch warrants, and one that would confound attribution
+when the models are re-fitted for S1-6/S1-7. The code now prints what percentages 82 and 8128 actually
+represent, so the drift is visible. Converting them is a separate decision.
 
 ### S3-4 · Results recorded in comments rather than captured
 `stm.rforestmodels.final.Rmd:143, 149, 155, 161, 167, 173, 180, 187, 193, 199, 205, 211`

@@ -47,6 +47,26 @@ recode_gender <- function(x) {
 #' Race values excluded from modelling, as in the original.
 EXCLUDED_RACE_VALUES <- c("Unknown", "Unknown/Other", "Non-Resident Alien")
 
+#' Strip an institution's trailing qualifier from a race value.
+#'
+#' Albany records race as e.g. "Asian, non-Hispanic"; the other two record the
+#' bare category. Everything that compares a race value against a known set --
+#' the exclusion filter and `recode_race()` alike -- must compare the stripped
+#' form, or Albany's rows are judged on a string the other institutions never
+#' produce.
+#'
+#' This ordering matters. The original code ran `separate(sep = ",")` on Albany
+#' *before* filtering out "Unknown" and friends, so a value like
+#' "Unknown, non-Hispanic" was reduced to "Unknown" and dropped. Filtering the
+#' raw value instead would let it through to `recode_race()`, which would then
+#' stop the pipeline on a category that was always meant to be discarded.
+#'
+#' @param x Character vector of raw race values.
+#' @return Character vector with any ", ..." qualifier removed.
+race_base_value <- function(x) {
+  sub(",.*$", "", as.character(x))
+}
+
 #' The canonical race levels, after harmonisation.
 RACE_LEVELS <- c(
   "American Indian or Alaska Native",
@@ -94,9 +114,7 @@ RACE_LOOKUP <- c(
 #' @param x Character vector of raw race values.
 #' @return Character vector drawn from `RACE_LEVELS`.
 recode_race <- function(x) {
-  x <- as.character(x)
-  # Albany qualifies values as e.g. "Asian, non-Hispanic". Drop the qualifier.
-  base_value <- sub(",.*$", "", x)
+  base_value <- race_base_value(x)
 
   out <- unname(RACE_LOOKUP[base_value])
 

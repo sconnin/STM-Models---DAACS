@@ -116,6 +116,24 @@ test_that("excluded values are not silently recoded", {
   }
 })
 
+test_that("race_base_value strips an institution's trailing qualifier", {
+  expect_equal(race_base_value("Asian, non-Hispanic"), "Asian")
+  expect_equal(race_base_value("Asian"), "Asian")
+  expect_equal(race_base_value("Two or more races, non-Hispanic"), "Two or more races")
+  expect_equal(race_base_value(c("White, non-Hispanic", "Black")), c("White", "Black"))
+})
+
+test_that("a qualified excluded value is caught by the exclusion filter", {
+  # The regression this guards: filtering the RAW value lets Albany's
+  # "Unknown, non-Hispanic" through, because it matches no EXCLUDED_RACE_VALUES
+  # entry -- and it then halts recode_race(). The original code avoided this by
+  # splitting on the comma before filtering.
+  qualified <- paste0(EXCLUDED_RACE_VALUES, ", non-Hispanic")
+
+  expect_false(any(qualified %in% EXCLUDED_RACE_VALUES))
+  expect_true(all(race_base_value(qualified) %in% EXCLUDED_RACE_VALUES))
+})
+
 test_that("RACE_LEVELS has no duplicates and covers the lookup targets", {
   expect_equal(anyDuplicated(RACE_LEVELS), 0)
   expect_true(all(unname(RACE_LOOKUP) %in% RACE_LEVELS))

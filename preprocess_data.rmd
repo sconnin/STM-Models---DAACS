@@ -243,7 +243,13 @@ covariates <- function(x, y) {
   x %>%
     dplyr::select(c(daacs_id, age, gender, all_of(y), first_gen, on_time_term1)) %>%
     rename(race = all_of(y)) %>%
-    filter(!race %in% EXCLUDED_RACE_VALUES) %>%
+    # Compare the stripped form, not the raw string. Albany writes
+    # "Unknown, non-Hispanic"; the raw value matches no entry in
+    # EXCLUDED_RACE_VALUES, so filtering it directly would carry the row
+    # through to recode_race() and halt the pipeline on a category that was
+    # always meant to be dropped. The original achieved this by running
+    # separate() before the filter. See race_base_value() in R/covariate_levels.R.
+    filter(!race_base_value(race) %in% EXCLUDED_RACE_VALUES) %>%
     rename(c(doc_id = daacs_id)) %>%
     na.omit() %>%
     mutate(age = as.integer(round(age))) %>%

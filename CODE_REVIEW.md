@@ -76,6 +76,10 @@ labeled as describing.
 **Recommendation** — change to `srl.topics.12`. This is subsumed by the Phase 4 rewrite of the block
 into a single `map()` over topics, which makes the class of error impossible.
 
+**RESOLVED** — `fit_topic_forests()` in `R/rf_topic_importance.R` iterates over topics against one
+table, so the error cannot recur. **This changes the reported topic-2 figure**, which described a
+different latent topic than its label claimed.
+
 ---
 
 ### S1-3 · Three of four feedback-view frames are duplicates
@@ -93,6 +97,9 @@ consumed downstream (L258) — but the objects exist and are named as though the
 so any future use silently gets K=12.
 
 **Recommendation** — fix the joins, or delete the three unused objects. Don't leave them mislabeled.
+
+**RESOLVED** — the three unused variants were deleted. Nothing downstream consumed them, so no result
+changes; recreate them against `t.18`/`t.24`/`t.32` if those K values are ever genuinely wanted.
 
 ---
 
@@ -343,6 +350,10 @@ Thirteen `randomForest()` calls, no seed. The variance-explained figures recorde
 `ntree = 1000` the run-to-run variation is small but nonzero — and several reported values are near
 zero or negative (`-3.2`, `-1.54`, `-1.04`, `-3.08`), where the sign itself may not be stable.
 
+**RESOLVED** — `fit_topic_forests()` seeds each model as `seed + topic`, so every fit is
+independently reproducible. **This changes all reported variance-explained figures**: the originals
+came from unseeded runs that cannot be recovered.
+
 ### S3-3 · Frequency thresholds hardcoded as absolute counts
 `stm_models_final.rmd:57`
 
@@ -370,6 +381,37 @@ code.
 
 **Recommendation** — collect into a data frame and print it. Falls out naturally from the Phase 4
 `map()` rewrite.
+
+**RESOLVED** — `fit_topic_forests()` returns a tibble of `topic`, `n_obs`, `var_explained` and the
+fitted model, which the notebook prints sorted. No result change; the numbers were always computed,
+just never captured.
+
+---
+
+### S3-5 · `vip` has been archived from CRAN
+`stm.rforestmodels.final.Rmd` — `library(vip)` plus 13 `vip()` calls
+
+Found while building the `renv` environment. `vip` is absent from the current CRAN index:
+
+```
+vip in current CRAN index: FALSE
+archived tarballs found: 14
+most recent archived: vip_0.4.6.tar.gz
+```
+
+`install.packages("vip")` therefore fails for anyone attempting to reproduce this analysis —
+including the original author on a new machine. This is a reproducibility defect in the pipeline, not
+a local environment quirk.
+
+The saving grace is that `vip()` computes nothing for a `randomForest` object: it reads
+`randomForest::importance()` and draws it. The values are available without the package.
+
+**RESOLVED** — replaced with a ggplot2 rendering in `R/rf_topic_importance.R`, reading the same
+`randomForest::importance()` values. The dependency is removed rather than pinned, so nothing has to
+be fetched from the CRAN archive. Figures change in appearance; the numbers do not.
+
+`tuneR` was removed at the same time — an audio-processing package, declared but never called,
+almost certainly a mistaken autocomplete for `tune`.
 
 ---
 

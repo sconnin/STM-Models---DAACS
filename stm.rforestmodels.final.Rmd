@@ -27,10 +27,18 @@ library(janitor)
 library(magrittr)
 library(stm)
 library(randomForest)
-library(tuneR)
-library(vip)
+
+# Shared helpers: fit_topic_forests(), topic_importance(), plot_topic_importance()
+source("R/rf_topic_importance.R")
 ```
-This is an initial inferential exploration of topic proportions and srl component scores/feedback views using Random Forest. 
+
+Two libraries were dropped here. `tuneR` is an audio-processing package that
+nothing in this file calls -- almost certainly a mistaken autocomplete for `tune`.
+`vip` has been archived from CRAN, so `install.packages("vip")` now fails; its
+variable-importance plots are reproduced with ggplot2 in `R/rf_topic_importance.R`,
+reading the same `randomForest::importance()` values it read.
+
+This is an initial inferential exploration of topic proportions and srl component scores/feedback views using Random Forest.
 
 First, load stm prevalence models for analysis 
 
@@ -134,124 +142,42 @@ srl.topics.24 <- left_join(srl.features, t.24, by = c("doc_id", "institution"))
 srl.topics.32 <- left_join(srl.features, t.32, by = c("doc_id", "institution"))
 ```
 
-Build Random Forest model for 12 topics. Assess variance in document topic content as explained by srl variable. 
+Build Random Forest models for the K=12 topics, assessing how much variance in
+each topic's document prevalence is explained by the SRL component scores.
 
-Note: explained variance indicates a range from <1 (modeling noise) -to- ~21%
+This replaces twelve near-identical fitting blocks and twelve `vip()` calls. Two
+changes here alter reported numbers, and both are deliberate:
+
+- **Every topic now reads `srl.topics.12`.** The previous topic-2 block read
+  `srl.topics.32`, so its result described a different latent topic than its
+  label claimed (`CODE_REVIEW.md` S1-2). Iterating makes that error impossible
+  rather than merely corrected.
+- **Fitting is seeded.** The previous code called `randomForest()` with no
+  `set.seed()`, so its figures could not be regenerated (S3-2). Several were
+  near zero or negative, where the sign itself is not stable run to run.
+
+Variance explained is returned as data rather than recorded in trailing
+comments, so it can be sorted, plotted and compared against a re-run (S3-4).
 
 ```{r}
-# Topic 1
+topic_forests <- fit_topic_forests(srl.topics.12, topics = 1:12, ntree = 1000)
 
-t1.12 <- srl.topics.12 %>%
-  select(Topic1, starts_with("srl")) %>%
-  na.omit()
-rf.t1.12 <- randomForest(Topic1 ~ ., data = t1.12, ntree = 1000, importance = TRUE)
-var.t1.12 <- summary(rf.t1.12$rsq * 100) # max var explained 8.38
+topic_forests %>%
+  select(topic, n_obs, var_explained) %>%
+  arrange(desc(var_explained))
+```
 
-# Topic 2
+Variable importance for each topic. `plot_topic_importance()` reads the same
+`randomForest::importance()` values `vip()` did.
 
-t2.12 <- srl.topics.32 %>%
-  select(Topic2, starts_with("srl")) %>%
-  na.omit()
-rf.t2.12 <- randomForest(Topic2 ~ ., data = t2.12, ntree = 1000, importance = TRUE)
-var.t2.12 <- summary(rf.t2.12$rsq * 100) # max var explained -3.2
+```{r fig.width = 12, fig.height = 14}
+importance_plots <- purrr::map2(
+  topic_forests$model,
+  topic_forests$topic,
+  ~ plot_topic_importance(.x, title = paste("Topic", .y))
+)
 
-# Topic 3
-
-t3.12 <- srl.topics.12 %>%
-  select(Topic3, starts_with("srl")) %>%
-  na.omit()
-rf.t3.12 <- randomForest(Topic3 ~ ., data = t3.12, ntree = 1000, importance = TRUE)
-var.t3.12 <- summary(rf.t3.12$rsq * 100) # max var explained 21.4
-
-
-# Topic 4
-
-t4.12 <- srl.topics.12 %>%
-  select(Topic4, starts_with("srl")) %>%
-  na.omit()
-rf.t4.12 <- randomForest(Topic4 ~ ., data = t4.12, ntree = 1000, importance = TRUE)
-var.t4.12 <- summary(rf.t4.12$rsq * 100) # max var explained -1.54
-
-# Topic 5
-
-t5.12 <- srl.topics.12 %>%
-  select(Topic5, starts_with("srl")) %>%
-  na.omit()
-rf.t5.12 <- randomForest(Topic5 ~ ., data = t5.12, ntree = 1000, importance = TRUE)
-var.t5.12 <- summary(rf.t5.12$rsq * 100) # max var explained -1.04
-
-# Topic 6
-
-t6.12 <- srl.topics.12 %>%
-  select(Topic6, starts_with("srl")) %>%
-  na.omit()
-rf.t6.12 <- randomForest(Topic6 ~ ., data = t6.12, ntree = 1000, importance = TRUE)
-var.t6.12 <- summary(rf.t6.12$rsq * 100) # max var explained -3.08
-
-# Topic 7
-
-t7.12 <- srl.topics.12 %>%
-  select(Topic7, starts_with("srl")) %>%
-  na.omit()
-rf.t7.12 <- randomForest(Topic7 ~ ., data = t7.12, ntree = 1000, importance = TRUE)
-var.t7.12 <- summary(rf.t7.12$rsq * 100) # max var explained 4.09
-
-
-# Topic 8
-
-t8.12 <- srl.topics.12 %>%
-  select(Topic8, starts_with("srl")) %>%
-  na.omit()
-rf.t8.12 <- randomForest(Topic8 ~ ., data = t8.12, ntree = 1000, importance = TRUE)
-var.t8.12 <- summary(rf.t8.12$rsq * 100) # max var explained 1.22
-
-# Topic 9
-
-t9.12 <- srl.topics.12 %>%
-  select(Topic9, starts_with("srl")) %>%
-  na.omit()
-rf.t9.12 <- randomForest(Topic9 ~ ., data = t9.12, ntree = 1000, importance = TRUE)
-var.t9.12 <- summary(rf.t9.12$rsq * 100) # max var explained 0.77
-
-# Topic 10
-
-t10.12 <- srl.topics.12 %>%
-  select(Topic10, starts_with("srl")) %>%
-  na.omit()
-rf.t10.12 <- randomForest(Topic10 ~ ., data = t10.12, ntree = 1000, importance = TRUE)
-var.t10.12 <- summary(rf.t10.12$rsq * 100) # max var explained 9.65
-
-# Topic 11
-
-t11.12 <- srl.topics.12 %>%
-  select(Topic11, starts_with("srl")) %>%
-  na.omit()
-rf.t11.12 <- randomForest(Topic11 ~ ., data = t11.12, ntree = 1000, importance = TRUE)
-var.t11.12 <- summary(rf.t11.12$rsq * 100) # max var explained 1.18
-
-# Topic 12
-
-t12.12 <- srl.topics.12 %>%
-  select(Topic12, starts_with("srl")) %>%
-  na.omit()
-rf.t12.12 <- randomForest(Topic12 ~ ., data = t12.12, ntree = 1000, importance = TRUE)
-var.t12.12 <- summary(rf.t12.12$rsq * 100) # max var explained 13.08
-
-# plot importance for 12 topics
-
-
-vip.1 <- vip(rf.t1.12)
-vip2 <- vip(rf.t2.12)
-vip3 <- vip(rf.t3.12)
-vip4 <- vip(rf.t4.12)
-vip5 <- vip(rf.t5.12)
-vip6 <- vip(rf.t6.12)
-vip7 <- vip(rf.t7.12)
-vip8 <- vip(rf.t8.12)
-vip9 <- vip(rf.t9.12)
-vip10 <- vip(rf.t10.12)
-vip11 <- vip(rf.t11.12)
-vip12 <- vip(rf.t12.12)
+patchwork::wrap_plots(importance_plots, ncol = 3)
 ```
 Construct dataframes that include Feedback Views (WGU)
 
@@ -266,10 +192,14 @@ wgu.views <- daacs.wgu %>%
 
 
 feedback.views.12 <- left_join(wgu.views, t.12, by = c("doc_id", "institution"))
-feedback.views.18 <- left_join(wgu.views, t.12, by = c("doc_id", "institution"))
-feedback.views.24 <- left_join(wgu.views, t.12, by = c("doc_id", "institution"))
-feedback.views.32 <- left_join(wgu.views, t.12, by = c("doc_id", "institution"))
 ```
+
+The `.18`, `.24` and `.32` variants were removed rather than repaired
+(`CODE_REVIEW.md` S1-3). All three joined `t.12`, so they were byte-identical
+copies of `feedback.views.12` carrying labels that claimed otherwise, and
+nothing downstream consumed them. Deleting mislabeled dead objects changes no
+result; recreate them against `t.18`/`t.24`/`t.32` if those K values are ever
+actually wanted.
 
 Model feedback views as a response using topics as predictors. Approx 9.5 - 10% of variance explained.
 
@@ -289,12 +219,19 @@ views12 %<>%
 
 views12 %<>% clean_names()
 
-# build Rfortest model
+# build random forest model
 
-views.model12 <- randomForest(feedback_views ~ ., data = views12, ntree = 1000, importance = TRUE) # %var explained 9.8
+set.seed(20220527)
+views.model12 <- randomForest(feedback_views ~ ., data = views12, ntree = 1000, importance = TRUE)
+
+cat("variance explained:", round(max(views.model12$rsq) * 100, 2), "%\n")
 
 # plot variable importance based on model results
 
-vip(views.model12)
+plot_topic_importance(
+  views.model12,
+  n_features = 12,
+  title = "Feedback views: topic importance"
+)
 ```
 

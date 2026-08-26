@@ -28,8 +28,9 @@ library(magrittr)
 library(stm)
 library(randomForest)
 
-# Shared helpers: fit_topic_forests(), topic_importance(), plot_topic_importance()
-source("R/rf_topic_importance.R")
+# Shared helpers
+source("R/rf_topic_importance.R") # fit_topic_forests(), plot_topic_importance()
+source("R/topic_labels.R") # topic_labels(), topic_rename_map()
 ```
 
 Two libraries were dropped here. `tuneR` is an audio-processing package that
@@ -213,7 +214,7 @@ views12 <- feedback.views.12 %>%
 # rename columns
 
 views12 %<>%
-  rename(c("Areas for Improvement" = Topic1, "Developing Writing Skills" = Topic2, "Test Anxiety" = Topic3, "Returning Learners-Degree Completion" = Topic4, "Improving Math Skills" = Topic5, "Confirmation and Readiness" = Topic6, "Transferable Strategies & Academic Success" = Topic7, "Time Management" = Topic8, "Getting it Right Getting it Done" = Topic9, "Adjusting Ones Mindset" = Topic10, "Appying and Retaining Subject Matter" = Topic11, "Managing Distractions" = Topic12))
+  rename(all_of(topic_rename_map()))
 
 # clean names
 

@@ -545,6 +545,77 @@ Pick one convention and apply it uniformly.
 
 ---
 
+## Findings surfaced during extraction
+
+Three defects that static reading missed. All three were found by writing tests against the extracted
+helpers — none is visible without either running the code or comparing copies mechanically.
+
+### X-1 · Topic labels disagree with themselves inside one document
+`stm_analyses_final.Rmd` — the canonical 12-element vector vs. nine single-topic plot titles
+
+The vector appeared verbatim seven times and all seven were byte-identical. But nine *separate* plot
+titles of the form `main = "Topic N = <label>"` name the same topics, and three of them disagree:
+
+| Topic | Plot title | Canonical vector |
+|---|---|---|
+| 7 | Transferable Strategies **-** Academic Success | Transferable Strategies **&** Academic Success |
+| 9 | Getting Right Getting it Done | Getting **it** Right Getting it Done |
+| 11 | **Applying** and Retaining Subject Matter | **Appying** and Retaining Subject Matter |
+
+Topic 11 is the awkward one: the plot title is spelled correctly and **the canonical vector carries a
+typo**, so the misspelling is the version that appears in six figures and the topic-correlation
+network while the correct spelling appears in one.
+
+**Not resolved.** `R/topic_labels.R` preserves the vector exactly, typo included, because correcting
+it changes figure output. The nine plot titles were left untouched for the same reason. Deciding
+which spelling wins — and applying it in one place — is a one-line change once you make the call.
+
+### X-2 · Top-essay files were written with a spurious frequency column
+`essay_examples_final.Rmd` — inside the former `top.essays()`
+
+```r
+raw.essays <- inner_join(...) %>% select(text) %>% table()
+write.table(raw.essays, file = essay.filename, sep = "\t", row.names = FALSE, col.names = FALSE)
+```
+
+`base::table()` counts occurrences of each distinct essay. Essays are unique, so every count is 1,
+and each line was written as:
+
+```
+"first essay text"	1
+```
+
+— quoted, with a meaningless `1` appended. (The local variable also named `table` did not shadow the
+function: R skips non-function bindings when a name is used in call position.) Verified by running
+both versions against synthetic essays.
+
+**RESOLVED** — `write_top_essays()` uses `writeLines()`. **This changes the contents of every
+top-essay file**, which are described in `essay_examples_final.Rmd` as feeding downstream analysis
+and writeup.
+
+### X-3 · One cleaning pattern only works under ICU, not base R
+`preprocess_data.rmd` — `pattern14`, now `punctuation_except_hyphen`
+
+```r
+"[\\p{P}\\p{S}--[-]]"
+```
+
+The `--` is ICU character-class subtraction. `stringr` uses ICU, so the pipeline works. Base R's TRE
+engine does not merely warn — it **errors**:
+
+```
+invalid regular expression '[\p{P}\p{S}--[-]]', reason 'Invalid character range'
+```
+
+Harmless today because every application goes through `str_replace_all()`. It becomes a defect the
+moment anyone reaches for `grepl()`, `gsub()`, or `sub()` on this pattern, which is an easy and
+invisible mistake to make.
+
+**Documented, not changed** — the constraint is recorded in `R/cleaning_patterns.R` and asserted by a
+test, so it cannot be quietly forgotten.
+
+---
+
 ## Duplication inventory
 
 Drives the Phase 4 extraction. Ordered by payoff.

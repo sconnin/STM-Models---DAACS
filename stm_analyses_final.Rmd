@@ -25,7 +25,6 @@ load libraries
 
 ```{r}
 library(tidyverse)
-library(httr)
 library(magrittr)
 library(stm)
 library(igraph) # network graph
@@ -33,7 +32,13 @@ library(huge) # network graph
 library(tidytext)
 library(patchwork)
 library(kableExtra)
+
+# Shared helpers: TOPIC_LABELS_K12, topic_labels()
+source("R/topic_labels.R")
 ```
+
+`httr` was dropped from this block -- it was declared here and in two other
+notebooks but never called (`CODE_REVIEW.md` S4).
 
 Load corpus, kresult, and models -- from preprocess_data_final and stm topic models
 
@@ -472,10 +477,7 @@ plot(gender.pred,
   xlab = "More Male ... More Female",
   main = "Effect of Gender: K=12 Prevalence",
   xlim = c(-.06, .04), labeltype = "custom",
-  custom.labels = c(
-    "Areas for Improvement", "Developing Writing Skills", "Test Anxiety", "Returning Learners-Degree Completion", "Improving Math Skills", "Confirmation and Readiness", "Transferable Strategies & Academic Success", "Time Management", "Getting it Right Getting it Done", "Adjusting Ones Mindset",
-    "Appying and Retaining Subject Matter", "Managing Distractions"
-  )
+  custom.labels = topic_labels()
 )
 
 
@@ -511,10 +513,7 @@ plot(race.pred,
   xlab = "More White ... More Black or African American",
   main = "Effect of Race: K=12",
   xlim = c(-.05, .05), labeltype = "custom",
-  custom.labels = c(
-    "Areas for Improvement", "Developing Writing Skills", "Test Anxiety", "Returning Learners-Degree Completion", "Improving Math Skills", "Confirmation and Readiness", "Transferable Strategies & Academic Success", "Time Management", "Getting it Right Getting it Done", "Adjusting Ones Mindset",
-    "Appying and Retaining Subject Matter", "Managing Distractions"
-  )
+  custom.labels = topic_labels()
 )
 
 plot(race.pred,
@@ -524,10 +523,7 @@ plot(race.pred,
   xlab = "More White ... More Asian",
   main = "Effect of Race: K=12",
   xlim = c(-.05, .05), labeltype = "custom",
-  custom.labels = c(
-    "Areas for Improvement", "Developing Writing Skills", "Test Anxiety", "Returning Learners-Degree Completion", "Improving Math Skills", "Confirmation and Readiness", "Transferable Strategies & Academic Success", "Time Management", "Getting it Right Getting it Done", "Adjusting Ones Mindset",
-    "Appying and Retaining Subject Matter", "Managing Distractions"
-  )
+  custom.labels = topic_labels()
 )
 
 plot(race.pred,
@@ -537,10 +533,7 @@ plot(race.pred,
   xlab = "More White ... More Latinx",
   main = "Effect of Race: K=12",
   xlim = c(-.05, .05), labeltype = "custom",
-  custom.labels = c(
-    "Areas for Improvement", "Developing Writing Skills", "Test Anxiety", "Returning Learners-Degree Completion", "Improving Math Skills", "Confirmation and Readiness", "Transferable Strategies & Academic Success", "Time Management", "Getting it Right Getting it Done", "Adjusting Ones Mindset",
-    "Appying and Retaining Subject Matter", "Managing Distractions"
-  )
+  custom.labels = topic_labels()
 )
 ```
 
@@ -557,10 +550,7 @@ plot(first.gen.pred,
   xlab = "More First Generation ... Less First Generation",
   main = "Effect of First Generation",
   xlim = c(-.04, .02), labeltype = "custom",
-  custom.labels = c(
-    "Areas for Improvement", "Developing Writing Skills", "Test Anxiety", "Returning Learners-Degree Completion", "Improving Math Skills", "Confirmation and Readiness", "Transferable Strategies & Academic Success", "Time Management", "Getting it Right Getting it Done", "Adjusting Ones Mindset",
-    "Appying and Retaining Subject Matter", "Managing Distractions"
-  )
+  custom.labels = topic_labels()
 )
 ```
 
@@ -662,5 +652,5 @@ See: https://rdrr.io/cran/stm/src/R/topicCorr.R
 ```{r}
 mod.out.corr <- topicCorr(stm.p.12, method = "simple", cutoff = .05)
 
-plot(mod.out.corr, main = "K=12: Topic Network (P < 0.05)", vlabels = c("Areas for Improvement", "Developing Writing Skills", "Test Anxiety", "Returning Learners-Degree Completion", "Improving Math Skills", "Confirmation and Readiness", "Transferable Strategies & Academic Success", "Time Management", "Getting it Right Getting it Done", "Adjusting Ones Mindset", "Appying and Retaining Subject Matter", "Managing Distractions"), vertex.label.cex = 0.75, label.color = "darkred", vertex.color = "lightblue")
+plot(mod.out.corr, main = "K=12: Topic Network (P < 0.05)", vlabels = topic_labels(), vertex.label.cex = 0.75, label.color = "darkred", vertex.color = "lightblue")
 ```

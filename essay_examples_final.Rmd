@@ -24,7 +24,20 @@ knitr::opts_chunk$set(echo = TRUE)
 load libraries
 
 ```{r}
-library(tidyverse)
+# The tidyverse core, loaded explicitly rather than through the umbrella
+# package. `library(tidyverse)` also pulls in `ragg`, which needs the
+# harfbuzz/fribidi system libraries -- a build dependency this analysis never
+# uses, and one that makes the project fail to install on a clean machine.
+# These are the same namespaces `library(tidyverse)` attaches, minus
+# `lubridate` (no date handling anywhere in the pipeline).
+library(dplyr)
+library(ggplot2)
+library(tibble)
+library(tidyr)
+library(readr)
+library(purrr)
+library(stringr)
+library(forcats)
 library(magrittr)
 library(stm)
 library(tidytext)

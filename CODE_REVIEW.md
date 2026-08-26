@@ -227,8 +227,22 @@ stopifnot(!anyNA(gender))  # fail rather than silently reassign
 
 The fix is surgical — WGU and Excelsior are untouched. Albany goes from zero recorded women to 2,088.
 
-This changes the sample composition of every model and therefore every published gender result. It
-needs a re-fit, and the affected findings need re-checking before they are cited further.
+**These counts are for the raw institution files. The effect on the modelling sample is much
+smaller**, and the distinction matters for judging how far published results move. Most Albany rows
+never reach the models: they are dropped by the essay-length filter, the contaminant list, or the
+covariate join. After running the corrected pipeline, `stm_data_final.csv` holds 8,210 documents:
+
+| Institution | n | F | M |
+|---|---:|---:|---:|
+| WGU | 6,175 | 3,573 | 2,602 |
+| Excelsior | 1,817 | 705 | 1,112 |
+| **Albany** | **218** | **134** | **84** |
+| **Total** | **8,210** | **4,412** | **3,798** |
+
+So the correction moves **134 students** from `M` to `F` in the data the models actually see — 1.6% of
+the corpus — not 2,088. That is still a real change to the gender covariate in every model, and it
+still needs a re-fit, but it is a small shift rather than a wholesale one. Cite the 134 figure when
+describing the impact on results, and the 2,088 figure only when describing the defect itself.
 
 **Recommendation** — enumerate the mapping and fail loudly on anything unexpected:
 
@@ -325,6 +339,24 @@ their own, separate from Black students at the other two institutions — which 
 Merging changes the composition of the race covariate and therefore every race result. The three race
 contrast plots should be re-checked afterwards.
 
+**Re-checked after running the pipeline.** The merge broke `stm_analyses_final.Rmd:534`, which is now
+also fixed. The modelling sample carries seven race levels:
+
+| Level | n |
+|---|---:|
+| White | 6,004 |
+| Black or African American | 1,012 |
+| Latinx | 472 |
+| Two or More Races | 334 |
+| Asian | 263 |
+| American Indian or Alaska Native | 69 |
+| Native Hawaiian or Other Pacific Islander | 56 |
+
+`"Black"` is no longer among them. The contrast at L534 passed that literal to `estimateEffect()`, so
+after harmonisation it referenced a level that does not exist — the fix to the recoding broke the plot
+that consumed it. It now passes `"Black or African American"`, and a `stopifnot()` above the block
+checks every contrast value against `levels(meta$race)` so this cannot recur silently.
+
 ---
 
 ### S1-8 · QA check does not perform the check its comment describes
@@ -347,8 +379,44 @@ The intended check — that no essay has fewer than 50 unique words — is alrea
 L136-138 inside `cleaner()`. This block is dead code presenting as verification, which is worse than
 no check: it reads like passing evidence.
 
-**RESOLVED** — replaced with a real count plus `stopifnot()`. `cleaner()` already enforces the rule,
-so this now asserts the filter did its job rather than pretending to be the filter.
+**RESOLVED** — replaced with a real count. See S1-9 for why it reports rather than asserts.
+
+---
+
+### S1-9 · The 50-unique-word floor is enforced mid-chain, so it does not hold of the final text
+`preprocess_data.rmd:161-168`
+
+Found while running the pipeline for the first time, when the `stopifnot()` added under S1-8 failed.
+
+`cleaner()` counts unique words and drops short essays at L161-162 — but **four more substitutions
+run afterwards**:
+
+```r
+mutate(count = lengths(map(strsplit(text, split = " "), unique))) %>%
+filter(!count < 50) %>%          # <- floor enforced HERE
+select(!count) %>%
+mutate(text = str_replace_all(text, pattern17, " ")) %>%
+filter(!str_detect(text, pattern = pattern18)) %>%
+mutate(text = str_replace_all(text, pattern19, "")) %>%
+mutate(text = str_replace_all(text, pattern20, "")) %>%
+mutate(text = str_replace_all(text, pattern21, ""))   # <- text still shrinking
+```
+
+An essay can clear the threshold when it is measured and fall below it once patterns 17/19/20/21
+strip further text. The filter therefore guarantees a property of an **intermediate** state, not of
+the data that reaches the models.
+
+**CONFIRMED against the real corpus: 3 of 8,265 essays (0.04%) finish below the floor.** The minimum
+is not far under it, so the practical impact is negligible — but the invariant the code appears to
+establish is not the one it establishes.
+
+This is exactly the order-dependence `CLAUDE.md` warns about: "Reordering can change which text
+survives the ≥50-unique-word filter."
+
+**DOCUMENTED, NOT FIXED.** Moving the count to the end of the chain would drop three more essays and
+change the corpus from 8,210 documents — a modelling decision, not a QA fix, and one that would
+invalidate the `n_documents == 8210` assertion and every published proportion. The QA block now
+reports the count and the minimum instead of asserting zero. Decide this alongside the re-fit.
 
 ---
 

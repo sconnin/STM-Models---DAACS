@@ -178,10 +178,10 @@ multi.p.12 <- tidy(stm.model.12, matrix = "gamma") %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
   mutate(proportion = (gamma / 8120) * 100)
 
-multi.p.12$topic <- factor(multi.p.12$topic, levels = multi.p.12[order(multi.p.12$proportion, decreasing = F), ]$topic)
+multi.p.12$topic <- factor(multi.p.12$topic, levels = multi.p.12[order(multi.p.12$proportion, decreasing = FALSE), ]$topic)
 
 m1 <- multi.p.12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_histogram(stat = "identity", alpha = 0.8, show.legend = FALSE) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
   labs(title = "Topic Prevalence within Corpus: K = 12", subtitle = "Topic Prevalence: manyTopics()", y = "Proportion (%)", x = "Topic") +
   coord_flip() +
   theme_classic()
@@ -194,10 +194,10 @@ select.pc.12.1 <- tidy(content_prev.model.k12$runout[[1]], matrix = "gamma") %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
   mutate(proportion = (gamma / 8120) * 100)
 
-select.pc.12.1$topic <- factor(select.pc.12.1$topic, levels = select.pc.12.1[order(select.pc.12.1$proportion, decreasing = F), ]$topic)
+select.pc.12.1$topic <- factor(select.pc.12.1$topic, levels = select.pc.12.1[order(select.pc.12.1$proportion, decreasing = FALSE), ]$topic)
 
 m2 <- select.pc.12.1 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_histogram(stat = "identity", alpha = 0.8, show.legend = FALSE) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
   labs(title = "Topic Prevalence: K = 12, Model 1", subtitle = "Prevalence & Content: selectModel()", y = "Proportion (%)", x = "Topic") +
   coord_flip() +
   theme_classic()
@@ -210,10 +210,10 @@ select.pc.12.2 <- tidy(content_prev.model.k12$runout[[2]], matrix = "gamma") %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
   mutate(proportion = (gamma / 8120) * 100)
 
-select.pc.12.2$topic <- factor(select.pc.12.2$topic, levels = select.pc.12.2[order(select.pc.12.2$proportion, decreasing = F), ]$topic)
+select.pc.12.2$topic <- factor(select.pc.12.2$topic, levels = select.pc.12.2[order(select.pc.12.2$proportion, decreasing = FALSE), ]$topic)
 
 m3 <- select.pc.12.2 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_histogram(stat = "identity", alpha = 0.8, show.legend = FALSE) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
   labs(title = "Topic Prevalence: K = 12, Model 2", subtitle = "Prevalence & Content: selectModel()", y = "Proportion (%)", x = "Topic") +
   coord_flip() +
   theme_classic()
@@ -226,10 +226,10 @@ stm.pc.k12 <- tidy(stm.model.k12, matrix = "gamma") %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
   mutate(proportion = (gamma / 8120) * 100)
 
-stm.pc.k12$topic <- factor(stm.pc.k12$topic, levels = stm.pc.k12[order(stm.pc.k12$proportion, decreasing = F), ]$topic)
+stm.pc.k12$topic <- factor(stm.pc.k12$topic, levels = stm.pc.k12[order(stm.pc.k12$proportion, decreasing = FALSE), ]$topic)
 
 m4 <- stm.pc.k12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_histogram(stat = "identity", alpha = 0.8, show.legend = FALSE) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
   labs(title = "Topic Prevalence: K = 12", subtitle = "Prevalence & Content: stm()", y = "Proportion (%)", x = "Topic") +
   coord_flip() +
   theme_classic()
@@ -242,10 +242,10 @@ stm.p.k12 <- tidy(stm.p.12, matrix = "gamma") %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
   mutate(proportion = (gamma / 8120) * 100)
 
-stm.p.k12$topic <- factor(stm.p.k12$topic, levels = stm.p.k12[order(stm.p.k12$proportion, decreasing = F), ]$topic)
+stm.p.k12$topic <- factor(stm.p.k12$topic, levels = stm.p.k12[order(stm.p.k12$proportion, decreasing = FALSE), ]$topic)
 
 m5 <- stm.p.k12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_histogram(stat = "identity", alpha = 0.8, show.legend = FALSE) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
   labs(title = "Topic Prevalence: K = 12", subtitle = "Prevalence: stm()", y = "Proportion (%)", x = "Topic") +
   coord_flip() +
   theme_classic()
@@ -288,7 +288,7 @@ sageLabels(stm.p.12)
 
 lab12.prob.stm <- l12.d[1] %>%
   as.data.frame() %>% # will collect top 10 lift terms for each topic
-  add_rownames(var = "topic") %>%
+  rownames_to_column(var = "topic") %>%
   unite(collapse, !1, remove = FALSE, sep = ", ") %>%
   rename(top_words = collapse) %>%
   select(topic, top_words) %>%
@@ -296,7 +296,7 @@ lab12.prob.stm <- l12.d[1] %>%
 
 lab12.frex.stm <- l12.d[2] %>%
   as.data.frame() %>% # will collect top 10 lift terms for each topic
-  add_rownames(var = "topic") %>%
+  rownames_to_column(var = "topic") %>%
   unite(collapse, !1, remove = FALSE, sep = ", ") %>%
   rename(top_words = collapse) %>%
   select(topic, top_words) %>%
@@ -304,7 +304,7 @@ lab12.frex.stm <- l12.d[2] %>%
 
 lab12.lift.stm <- l12.d[3] %>%
   as.data.frame() %>% # will collect top 10 lift terms for each topic
-  add_rownames(var = "topic") %>%
+  rownames_to_column(var = "topic") %>%
   unite(collapse, !1, remove = FALSE, sep = ", ") %>%
   rename(top_words = collapse) %>%
   select(topic, top_words) %>%
@@ -312,7 +312,7 @@ lab12.lift.stm <- l12.d[3] %>%
 
 lab12.score.stm <- l12.d[4] %>%
   as.data.frame() %>% # will collect top 10 lift terms for each topic
-  add_rownames(var = "topic") %>%
+  rownames_to_column(var = "topic") %>%
   unite(collapse, !1, remove = FALSE, sep = ", ") %>%
   rename(top_words = collapse) %>%
   select(topic, top_words) %>%
@@ -329,15 +329,15 @@ lab12.score.stm
 
 # another way to plot - plotSTM() cant assign label type to formulas with content
 
-plot.STM(stm.model.12, "labels", topics = c(1:12), width = 1200, labeltype = "prob", n = 10, main = 'Top Topic Words - "Probability": STM Optimized Prevalence Model')
+plot(stm.model.12, "labels", topics = c(1:12), width = 1200, labeltype = "prob", n = 10, main = 'Top Topic Words - "Probability": STM Optimized Prevalence Model')
 
-plot.STM(stm.p.12, "labels", labeltype = "prob", width = 1200, topics = c(1:12), n = 10, main = 'Top Topic Words - "Probability": STM Prevalence Model')
+plot(stm.p.12, "labels", labeltype = "prob", width = 1200, topics = c(1:12), n = 10, main = 'Top Topic Words - "Probability": STM Prevalence Model')
 
 # plot distribution of topic proportions -- the two prevalence models produce equivalent results
 
-plot.STM(stm.model.12, "hist", c(1:12), main = "Frequency Distribution of Topics: STM Prevalence Model")
+plot(stm.model.12, "hist", c(1:12), main = "Frequency Distribution of Topics: STM Prevalence Model")
 
-plot.STM(stm.p.12, "hist", c(1:12), main = "Frequency Distribution of Topics: STM Prevalence Model")
+plot(stm.p.12, "hist", c(1:12), main = "Frequency Distribution of Topics: STM Prevalence Model")
 ```
 Use make.dt to create a data table for the model object that we can run queries against 
 
@@ -405,9 +405,9 @@ Perspective plot -- compares word probabilities across 2 topics
 ```{r}
 # topic comparisons
 
-plot.STM(stm.p.12, "perspectives", topics = c(8, 12), n = 25, text.cex = 1)
+plot(stm.p.12, "perspectives", topics = c(8, 12), n = 25, text.cex = 1)
 
-plot.STM(stm.p.12, "perspectives", topics = c(11, 3), n = 25, text.cex = 1)
+plot(stm.p.12, "perspectives", topics = c(11, 3), n = 25, text.cex = 1)
 ```
 
 Evaluate covariate main effects on topics -- 12 topics for this purpose. 
@@ -479,22 +479,22 @@ plot(gender.pred,
 
 # gender comparison
 
-plot.STM(stm.p.12, "perspectives", topics = (1:12), n = 12, text.cex = 1, main = "Gender-Based Vocabulary: Test Anxiety")
+plot(stm.p.12, "perspectives", topics = (1:12), n = 12, text.cex = 1, main = "Gender-Based Vocabulary: Test Anxiety")
 ```
 Plot differences in word content by gender 1,2,3,5,7,8,9,11,12
 
 ```{r}
 # plot k = 12 model, content only
 
-plot.STM(stm.c.12, "perspectives", topics = c(1), n = 25, text.cex = 1, main = "Topic 1 = Areas for Improvement")
-plot.STM(stm.c.12, "perspectives", topics = c(2), n = 25, text.cex = 1, main = "Topic 2 = Developing Writing Skills")
-plot.STM(stm.c.12, "perspectives", topics = c(3), n = 25, text.cex = 1, main = "Topic 3 = Test Anxiety")
-plot.STM(stm.c.12, "perspectives", topics = c(5), n = 25, text.cex = 1, main = "Topic 5 = Improving Math Skills")
-plot.STM(stm.c.12, "perspectives", topics = c(7), n = 25, text.cex = 1, main = "Topic 7 = Transferable Strategies - Academic Success")
-plot.STM(stm.c.12, "perspectives", topics = c(8), n = 25, text.cex = 1, main = "Topic 8 = Time Management")
-plot.STM(stm.c.12, "perspectives", topics = c(9), n = 25, text.cex = 1, main = "Topic 9 = Getting Right Getting it Done")
-plot.STM(stm.c.12, "perspectives", topics = c(11), n = 25, text.cex = 1, main = "Topic 11 = Applying and Retaining Subject Matter")
-plot.STM(stm.c.12, "perspectives", topics = c(12), n = 25, text.cex = 1, , main = "Topic 12 = Managing Distractions")
+plot(stm.c.12, "perspectives", topics = c(1), n = 25, text.cex = 1, main = "Topic 1 = Areas for Improvement")
+plot(stm.c.12, "perspectives", topics = c(2), n = 25, text.cex = 1, main = "Topic 2 = Developing Writing Skills")
+plot(stm.c.12, "perspectives", topics = c(3), n = 25, text.cex = 1, main = "Topic 3 = Test Anxiety")
+plot(stm.c.12, "perspectives", topics = c(5), n = 25, text.cex = 1, main = "Topic 5 = Improving Math Skills")
+plot(stm.c.12, "perspectives", topics = c(7), n = 25, text.cex = 1, main = "Topic 7 = Transferable Strategies - Academic Success")
+plot(stm.c.12, "perspectives", topics = c(8), n = 25, text.cex = 1, main = "Topic 8 = Time Management")
+plot(stm.c.12, "perspectives", topics = c(9), n = 25, text.cex = 1, main = "Topic 9 = Getting Right Getting it Done")
+plot(stm.c.12, "perspectives", topics = c(11), n = 25, text.cex = 1, main = "Topic 11 = Applying and Retaining Subject Matter")
+plot(stm.c.12, "perspectives", topics = c(12), n = 25, text.cex = 1, , main = "Topic 12 = Managing Distractions")
 ```
 
 Plot effects - race. Basic stm prevalence model. This section does not include all of the significant effects. See covariate regressions.
@@ -608,13 +608,13 @@ c6 <- estimateEffect(formula = c(6) ~ gender * age, stmobj = stm.p.12, metadata 
 plot(c2,
   covariate = "age", model = interact, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .1),
-  printlegend = F, main = "Topic 2: Developing Writing Skills (P < 0.10)"
+  printlegend = FALSE, main = "Topic 2: Developing Writing Skills (P < 0.10)"
 )
 
 plot(c2,
   covariate = "age", model = interact, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "F", linecol = "red", add = T,
-  printlegend = F
+  moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
+  printlegend = FALSE
 )
 
 legend(18, .1, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
@@ -625,13 +625,13 @@ legend(18, .1, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 plot(c4,
   covariate = "age", model = interact, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(.04, .18),
-  printlegend = F, main = "Topic 4. Returning Learners-Degree Completion (P < 0.10)"
+  printlegend = FALSE, main = "Topic 4. Returning Learners-Degree Completion (P < 0.10)"
 )
 
 plot(c4,
   covariate = "age", model = interact, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "F", linecol = "red", add = T,
-  printlegend = F
+  moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
+  printlegend = FALSE
 )
 
 legend(18, 0.18, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
@@ -642,13 +642,13 @@ legend(18, 0.18, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 plot(c6,
   covariate = "age", model = interact, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .15),
-  printlegend = F, main = "Topic 6: Confirmation and Readiness (P < 0.10)"
+  printlegend = FALSE, main = "Topic 6: Confirmation and Readiness (P < 0.10)"
 )
 
 plot(c6,
   covariate = "age", model = interact, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "F", linecol = "red", add = T,
-  printlegend = F
+  moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
+  printlegend = FALSE
 )
 
 legend(18, 0.15, c("Male", "Female"), lwd = 2, col = c("blue", "red"))

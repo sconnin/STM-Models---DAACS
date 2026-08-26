@@ -1,7 +1,7 @@
 ---
 title: "DAACS - STM Text Processing"
 author: "Sean Connin"
-data: "05/27/22"
+date: "05/27/22"
 output:
   html_document: 
     toc: TRUE
@@ -221,7 +221,7 @@ covariates <- function(x, y) {
     mutate(age = as.integer(round(age))) %>%
     mutate(gender = ifelse(gender %in% c("Female", "FEMALE"), "F", "M")) %>%
     mutate(race = str_remove(race, " non-Hispanic")) %>%
-    mutate(across(race, str_replace, "Hispanic/Latino", "Latinx")) %>%
+    mutate(across(race, \(x) str_replace(x, "Hispanic/Latino", "Latinx"))) %>%
     mutate(race = str_replace(race, "Hispanic", "Latinx")) %>%
     mutate(race = str_replace(race, "Black,", "Black or African American")) %>%
     mutate(race = str_replace(race, "Am. Indian or Alaskan Native", "American Indian or Alaska Native")) %>%

@@ -58,3 +58,6 @@ renv/staging/
 # ---------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
+
+# In-project scratch (lint baselines, diffs) - never committed
+.scratch/

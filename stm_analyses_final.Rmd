@@ -37,17 +37,19 @@ library(kableExtra)
 
 Load corpus, kresult, and models -- from preprocess_data_final and stm topic models
 
-Models loaded in this file. 
+Models loaded in this file. Each file is written by stm_models_final.Rmd; the object names below are
+what `load()` restores into the global environment, so they are the names to reference downstream.
 
-- optimized.prevalence.models.6_32.Rda ==> contains models generated via. manyTopics()
+| File | Objects | Fitted by | Formula |
+|---|---|---|---|
+| optimized.prevalence.models.6_32.Rda | `stm.model.6` … `stm.model.32` | `manyTopics()` | prevalence |
+| optimized.prevalence.content.models.6_32.Rda | `content_prev.model.k6` … `.k32` | `selectModel()` | prevalence + content |
+| stm.prevalence.content.models.6_32.Rda | `stm.pc.6` … `stm.pc.32` | `stm()` | prevalence + content |
+| stm.prevalence.models.6_32.Rda | `stm.p.6` … `stm.p.32` | `stm()` | prevalence |
+| stm.content.models.6_32.Rda | `stm.c.6` … `stm.c.32` | `stm()` | content |
 
-- optimized.prevalence.models.6_32.Rda ==> contains models generated via. selectTopics(). 
-
-- prev.content.stm.6_32.Rda ==> contains models defined without optimization (prevalence & content formula)
-
-- prev.stm ==> contains models defined without optimization (prevalence formula)
-
-Note: optimized models referred to automatic selections based on  high-likelihood values.
+Note: "optimized" refers to automatic selection based on high-likelihood values. The `selectModel()`
+families return a list, so those objects are indexed as `$runout[[n]]` rather than used directly.
 
 ```{r}
 # load processed corpus - documents, vocab, meta
@@ -125,7 +127,7 @@ CE6_32$SemanticCoherence <- as.numeric(as.character(CE6_32$SemanticCoherence))
 
 CE6_32$Model <- factor(CE6_32$Model, levels = c("Mod6", "Mod12", "Mod18", "Mod24", "Mod32"))
 
-# save(CE6_28, file="exclusivity_coherence6-28.Rdata")
+# save(CE6_32, file="exclusivity_coherence6-28.Rdata")
 
 # build exclusivity & coherence plot for models
 
@@ -220,7 +222,7 @@ m3 <- select.pc.12.2 %>% ggplot(aes(x = topic, y = proportion, fill = proportion
 
 # plot k = 12, prevalence & content single model
 
-stm.pc.k12 <- tidy(stm.model.k12, matrix = "gamma") %>%
+stm.pc.k12 <- tidy(stm.pc.12, matrix = "gamma") %>%
   select(!document) %>%
   group_by(topic) %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
@@ -273,7 +275,7 @@ l12.a <- labelTopics(stm.model.12, c(1:12), n = 10) # printing highest prob
 
 # l12.b<-labelTopics(content_prev.model.k12$runout[[1]], c(1:12), n=10) # printing lift
 
-# l12.c<-labelTopics(stm.model.k12, c(1:12), n=10) # printing lift
+# l12.c<-labelTopics(stm.pc.12, c(1:12), n=10) # printing lift
 
 l12.d <- labelTopics(stm.p.12, c(1:12), n = 10) # printing highest prob
 
@@ -281,7 +283,7 @@ l12.d <- labelTopics(stm.p.12, c(1:12), n = 10) # printing highest prob
 
 sageLabels(stm.model.12)
 sageLabels(content_prev.model.k12$runout[[1]])
-sageLabels(stm.model.k12)
+sageLabels(stm.pc.12)
 sageLabels(stm.p.12)
 
 # create tables for top word categories == stm prevalence model
@@ -494,7 +496,7 @@ plot(stm.c.12, "perspectives", topics = c(7), n = 25, text.cex = 1, main = "Topi
 plot(stm.c.12, "perspectives", topics = c(8), n = 25, text.cex = 1, main = "Topic 8 = Time Management")
 plot(stm.c.12, "perspectives", topics = c(9), n = 25, text.cex = 1, main = "Topic 9 = Getting Right Getting it Done")
 plot(stm.c.12, "perspectives", topics = c(11), n = 25, text.cex = 1, main = "Topic 11 = Applying and Retaining Subject Matter")
-plot(stm.c.12, "perspectives", topics = c(12), n = 25, text.cex = 1, , main = "Topic 12 = Managing Distractions")
+plot(stm.c.12, "perspectives", topics = c(12), n = 25, text.cex = 1, main = "Topic 12 = Managing Distractions")
 ```
 
 Plot effects - race. Basic stm prevalence model. This section does not include all of the significant effects. See covariate regressions.
@@ -576,7 +578,7 @@ plot_age <- function(effect, covariate, topic_num, model) {
   }
 }
 
-plot_age(age.pred, "age", c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), stm.model.k12)
+plot_age(age.pred, "age", c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), stm.p.12)
 ```
 
 Plot age & gender interactions - basic stm prevalence model
@@ -606,13 +608,13 @@ c6 <- estimateEffect(formula = c(6) ~ gender * age, stmobj = stm.p.12, metadata 
 
 
 plot(c2,
-  covariate = "age", model = interact, method = "continuous", xlab = "Age",
+  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .1),
   printlegend = FALSE, main = "Topic 2: Developing Writing Skills (P < 0.10)"
 )
 
 plot(c2,
-  covariate = "age", model = interact, method = "continuous", xlab = "Age",
+  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
   printlegend = FALSE
 )
@@ -623,13 +625,13 @@ legend(18, .1, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 # topic 4
 
 plot(c4,
-  covariate = "age", model = interact, method = "continuous", xlab = "Age",
+  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(.04, .18),
   printlegend = FALSE, main = "Topic 4. Returning Learners-Degree Completion (P < 0.10)"
 )
 
 plot(c4,
-  covariate = "age", model = interact, method = "continuous", xlab = "Age",
+  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
   printlegend = FALSE
 )
@@ -640,13 +642,13 @@ legend(18, 0.18, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 # topic 6
 
 plot(c6,
-  covariate = "age", model = interact, method = "continuous", xlab = "Age",
+  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .15),
   printlegend = FALSE, main = "Topic 6: Confirmation and Readiness (P < 0.10)"
 )
 
 plot(c6,
-  covariate = "age", model = interact, method = "continuous", xlab = "Age",
+  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
   printlegend = FALSE
 )

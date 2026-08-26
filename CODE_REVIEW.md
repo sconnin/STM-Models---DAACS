@@ -249,6 +249,12 @@ stopifnot(n_short == 0)
 
 These prevent execution. Fixing them changes no working behavior.
 
+> **RESOLVED** on branch `fix/broken-model-references`. All six are fixed and every model reference
+> and `load()` filename now resolves. Note that `lintr` cannot catch this class of defect at all —
+> `object_usage_linter` is blind to names introduced by `load()` — so the fix is verified by a
+> dedicated cross-file check that builds the set of names `stm_models_final.Rmd` actually creates and
+> confirms each downstream reference against it. The resolution chosen for each site is recorded below.
+
 ### S2-1 · Loads two `.Rda` files that are never written
 `essay_examples_final.Rmd:46, 50`
 
@@ -269,9 +275,19 @@ Nine references across two files to `stm.model.k6` / `k12` / `k18` / `k24` / `k3
 are assigned in any file. The nearest real families are `stm.pc.*` (prevalence + content,
 `stm_models_final.rmd:159-177`) and `stm.p.*` (prevalence only, L192-205).
 
-**This one needs a decision, not just a rename** — `stm_analyses_final.Rmd:229` builds `stm.pc.k12`
-from `stm.model.k12` and labels the resulting plot `"Prevalence & Content: stm()"`, which points at
-`stm.pc.12`. Confirm that reading before substituting.
+**This one needed a decision, not just a rename**, and the sites do not all resolve the same way.
+Each was settled from surrounding evidence rather than by pattern-matching the name:
+
+| Site | Resolved to | Evidence |
+|---|---|---|
+| `stm_analyses_final.Rmd` — `tidy(...)` for plot `m4` | `stm.pc.12` | The plot's own subtitle reads `"Prevalence & Content: stm()"`, which names the `stm.pc.*` family exactly |
+| `stm_analyses_final.Rmd` — `sageLabels()` | `stm.pc.12` | Sits in a four-call enumeration of the model families; `stm.pc.*` is the one missing |
+| `stm_analyses_final.Rmd` — commented `labelTopics()` | `stm.pc.12` | Comment says "printing lift", and lift is what a content-formula model prints |
+| `stm_analyses_final.Rmd` — `plot_age(age.pred, ...)` | **`stm.p.12`** | Differs from the rest: `age.pred` was built with `stmobj = stm.p.12`, and `plot.estimateEffect` must receive the same model the effect was estimated from. Passing `stm.pc.12` here would silently misrender every age effect |
+| `essay_examples_final.Rmd` — `exemplars()`, `top.essays()` (6 calls) | `stm.pc.6`…`stm.pc.32` | Prose above the block: "the essays extracted here come from the basic stm models — which include prevalence and content formula" |
+
+The fourth row is the trap: four sites share a name, and one of them needs a different object than the
+other three.
 
 ### S2-4 · `model = interact` — undefined object
 `stm_analyses_final.Rmd:621, 625, 634, 638, 647, 651` · The object is `interact.signf` (L600). Six
@@ -371,7 +387,7 @@ Still open, and why:
 |---|---|---|
 | `object_name_linter` (dot.case) | 133 | `save()`/`load()` couple object names across files — see below |
 | `pipe_consistency_linter` | 239 | `%>%` vs `\|>` is a one-time convention decision; pairs naturally with removing `%<>%` |
-| `object_usage_linter` | 172 | These *are* S2/S3 findings — undefined objects and dead assignments |
+| `object_usage_linter` | 172 → **6 real** | 166 are noise: the analysis packages are not installed on the linting machine, so lintr cannot resolve `findThoughts`, `make.dt`, or any dplyr NSE variable and reports them as undefined. The 6 genuine findings are the dead `index`/`examples` assignments in the three `exemplars()` copies, removed by the Phase 4 extraction. |
 | `line_length_linter` | 90 | Mostly the 21 regex patterns and the repeated 12-element label vector; resolved by the Phase 4 extraction |
 | `commented_code_linter` | 14 | Judgment call per site — some are documentation, some are dead code |
 | `assignment_linter` | 10 | The `%<>%` sites; decide alongside pipe consistency |

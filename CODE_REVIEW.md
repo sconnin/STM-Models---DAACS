@@ -212,6 +212,16 @@ mutate(gender = case_when(
 stopifnot(!anyNA(gender))  # fail rather than silently reassign
 ```
 
+**RESOLVED** in `R/covariate_levels.R`, and the effect measured on the real data:
+
+| Institution | n | Recorded female before | After | Reclassified |
+|---|---|---|---|---|
+| WGU | 13,188 | 7,632 | 7,632 | 0 |
+| Excelsior | 10,380 | 4,210 | 4,210 | 0 |
+| **Albany** | 3,941 | **0** | **2,088** | **2,088** |
+
+The fix is surgical — WGU and Excelsior are untouched. Albany goes from zero recorded women to 2,088.
+
 This changes the sample composition of every model and therefore every published gender result. It
 needs a re-fit, and the affected findings need re-checking before they are cited further.
 
@@ -294,8 +304,21 @@ resulting level set so a new encoding fails loudly instead of silently adding a 
 stopifnot(all(unique(race) %in% RACE_LEVELS))
 ```
 
-Merging `"Black"` with `"Black or African American"` changes the composition of the race covariate
-and therefore every race result. The three race contrast plots should be re-checked afterwards.
+**RESOLVED** in `R/covariate_levels.R`, and the effect measured on the real data:
+
+| Institution | Level merged | n |
+|---|---|---|
+| WGU | `Black` → `Black or African American` | **1,442** |
+| WGU | `Native Hawaiian` → `Native Hawaiian or Other Pacific Islander` | **87** |
+| Excelsior | no change | — |
+| Albany | no change | — |
+
+Distinct race levels drop from **9 to 7**. The 1,442 WGU Black students previously sat in a level of
+their own, separate from Black students at the other two institutions — which is what made the
+`cov.value1 = "Black"` contrast a WGU-only comparison.
+
+Merging changes the composition of the race covariate and therefore every race result. The three race
+contrast plots should be re-checked afterwards.
 
 ---
 

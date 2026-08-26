@@ -55,7 +55,7 @@ for (inst in names(sources)) {
 
 say("")
 say("  After applying the line as written, to Albany only:")
-alb_after <- daacs.ualbany %>%
+alb_after <- daacs.ualbany |>
   mutate(srl_grit_after = case_when(srl_grit %in% NaN ~ NA))
 say(sprintf(
   "    non-NA before = %d   non-NA after = %d",
@@ -72,12 +72,12 @@ say("  sends every other value, including unexpected categories, to 'M'.")
 say("")
 
 for (inst in names(sources)) {
-  d <- sources[[inst]] %>% clean_names()
+  d <- sources[[inst]] |> clean_names()
   if (!"gender" %in% names(d)) {
     say("  ", inst, ": no gender column")
     next
   }
-  counts <- d %>% count(gender, sort = TRUE)
+  counts <- d |> count(gender, sort = TRUE)
   say("  ", inst, ":")
   for (i in seq_len(nrow(counts))) {
     label <- counts$gender[i]
@@ -98,11 +98,11 @@ say("")
 
 race_columns <- c(WG = "ethnicity2", EC = "ethnicity", Alb = "race_ethnicity")
 
-# Reproduce the recoding chain from preprocess_data.rmd, applied to DISTINCT
+# Reproduce the ORIGINAL recoding chain (pre-fix), applied to DISTINCT
 # VALUES rather than to rows.
-recode_race <- function(values, split_on_comma) {
+original_recode_race <- function(values, split_on_comma) {
   x <- values
-  if (split_on_comma) x <- sub(",.*$", "", x) # separate(extra='drop')
+  if (split_on_comma) x <- sub(",.*$", "", x) # nolint: commented_code_linter.
   x <- str_remove(x, " non-Hispanic")
   x <- str_replace(x, "Hispanic/Latino", "Latinx")
   x <- str_replace(x, "Hispanic", "Latinx")
@@ -115,7 +115,7 @@ recode_race <- function(values, split_on_comma) {
 
 final_levels <- list()
 for (inst in names(race_columns)) {
-  d <- sources[[inst]] %>% clean_names()
+  d <- sources[[inst]] |> clean_names()
   col <- race_columns[[inst]]
   if (!col %in% names(d)) {
     say("  ", inst, ": no column '", col, "'")
@@ -123,7 +123,7 @@ for (inst in names(race_columns)) {
   }
   distinct_values <- sort(unique(as.character(d[[col]])))
   distinct_values <- distinct_values[!is.na(distinct_values)]
-  recoded <- recode_race(distinct_values, split_on_comma = (inst == "Alb"))
+  recoded <- original_recode_race(distinct_values, split_on_comma = (inst == "Alb"))
 
   say("  ", inst, "  (column: ", col, ")")
   for (i in seq_along(distinct_values)) {

@@ -25,11 +25,13 @@ Load libraries
 
 ```{r}
 library(tidyverse)
-library(httr)
 library(magrittr)
 library(stm)
 library(tidytext)
 library(janitor)
+
+# Shared helpers: recode_gender(), recode_race(), EXCLUDED_RACE_VALUES
+source("R/covariate_levels.R")
 ```
 
 Load data - raw data 
@@ -160,6 +162,26 @@ alb_clean <- cleaner(alb_essays)
 
 Subset daacs covariates from .rda file and process selected features.
 
+The gender and race recoding now runs through `R/covariate_levels.R`, which
+fails on an unrecognised value rather than assigning one. Two corrections there
+change the modelling sample (`CODE_REVIEW.md` S1-6, S1-7):
+
+- **Gender.** The institutions encode it three different ways -- WGU
+  `Female`/`Male`, Excelsior `FEMALE`/`MALE`, Albany `F`/`M`. The previous
+  `ifelse(gender %in% c("Female", "FEMALE"), "F", "M")` matched the first two
+  and sent everything else to `"M"`, which relabelled **all 2,088 Albany women
+  as men** -- 53% of that institution's sample. They are now recoded correctly.
+- **Race.** WGU wrote `Black` where the others wrote `Black or African
+  American`, and `Native Hawaiian` where Excelsior wrote `Native Hawaiian or
+  Other Pacific Islander`, so each group occupied two levels depending on which
+  institution recorded the student. The `str_replace(race, "Black,", ...)` that
+  was meant to prevent this required a trailing comma no value carries at that
+  point, so it never fired. Both groups are now merged.
+
+The `separate()` call that split Albany's `"Asian, non-Hispanic"` values was
+removed: `recode_race()` strips that qualifier itself, so the
+institution-specific branch is no longer needed.
+
 ```{r}
 # load daacs
 
@@ -218,27 +240,18 @@ alb_covariates %<>%
 # daacs cleaner function for race
 
 covariates <- function(x, y) {
-  x %<>%
-    dplyr::select(c(daacs_id, age, gender, y, first_gen, on_time_term1))
-
-  if (y == "race_ethnicity") {
-    x %<>% separate(race_ethnicity, into = c("race_ethnicity"), extra = "drop", sep = ",", remove = TRUE)
-  }
   x %>%
-    rename(race = y) %>%
-    filter(!race %in% c("Unknown", "Unknown/Other", "Non-Resident Alien")) %>%
+    dplyr::select(c(daacs_id, age, gender, all_of(y), first_gen, on_time_term1)) %>%
+    rename(race = all_of(y)) %>%
+    filter(!race %in% EXCLUDED_RACE_VALUES) %>%
     rename(c(doc_id = daacs_id)) %>%
     na.omit() %>%
     mutate(age = as.integer(round(age))) %>%
-    mutate(gender = ifelse(gender %in% c("Female", "FEMALE"), "F", "M")) %>%
-    mutate(race = str_remove(race, " non-Hispanic")) %>%
-    mutate(across(race, \(x) str_replace(x, "Hispanic/Latino", "Latinx"))) %>%
-    mutate(race = str_replace(race, "Hispanic", "Latinx")) %>%
-    mutate(race = str_replace(race, "Black,", "Black or African American")) %>%
-    mutate(race = str_replace(race, "Am. Indian or Alaskan Native", "American Indian or Alaska Native")) %>%
-    mutate(race = str_replace(race, "Multiple|Two or more races", "Two or More Races")) %>%
-    mutate(race = str_replace(race, "Native Hawaiian,", "Native Hawaiian or Other Pacific Islander")) %>%
-    mutate(across(3:4, as_factor))
+    mutate(
+      gender = recode_gender(gender),
+      race = recode_race(race)
+    ) %>%
+    mutate(across(c(gender, race), as_factor))
 }
 
 wg_covariate <- covariates(wg_covariates, "ethnicity2")

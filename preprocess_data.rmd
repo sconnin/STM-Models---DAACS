@@ -104,7 +104,18 @@ alb_preclean <- precleaner(alb_essays)
 
 preclean_text <- rbind(wg_preclean, ec_preclean, alb_preclean)
 
-# write_csv(preclean_text, 'preclean_text.csv') # write to file for analyses.Rmd
+# Re-enabled. This write was commented out, but three notebooks read the file it
+# produces -- contaminant_removal_final.Rmd, essay_examples_final.Rmd and
+# stm_analyses_final.Rmd all call read_csv("preclean_text.csv"). With the write
+# disabled, none of them could run from a clean checkout.
+#
+# `preclean_text` is computed above either way, so persisting it changes no
+# value used later in this file. It only stops the pipeline depending on a file
+# nothing produces. See CODE_REVIEW.md R-1.
+#
+# The file holds essay text joined to identifiers and is IRB-protected;
+# .gitignore excludes *.csv so it stays local.
+write_csv(preclean_text, "preclean_text.csv")
 
 # final cleaning function
 

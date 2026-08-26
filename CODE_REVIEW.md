@@ -545,6 +545,57 @@ Pick one convention and apply it uniformly.
 
 ---
 
+## R — Reproducibility of the pipeline as a whole
+
+The most serious class of finding, and the last to surface: **the committed analysis cannot be
+regenerated from the committed code.** Three files are read that nothing in the repository produces.
+
+### R-1 · The write that three notebooks depend on was commented out
+`preprocess_data.rmd:107`
+
+```r
+# write_csv(preclean_text, 'preclean_text.csv') # write to file for analyses.Rmd
+```
+
+`preclean_text.csv` is read by `contaminant_removal_final.Rmd`, `essay_examples_final.Rmd` and
+`stm_analyses_final.Rmd`. With the only write disabled, none of them runs from a clean checkout.
+
+**RESOLVED** — re-enabled. `preclean_text` is computed either way, so persisting it changes no value
+used downstream; it only stops the pipeline depending on a file nothing produces.
+
+### R-2 · `contaminant_removal_final.Rmd` depends on an artifact nothing produces
+`contaminant_removal_final.Rmd:36` — `load("topic.prob6_28.Rdata")`
+
+That file is the output of an early K = 6–28 modelling run. It is not saved by `stm_models_final.Rmd`
+and is not in the repository. The notebook cannot run.
+
+Its sole output is `remove.csv`, the contaminant exclusion list that `preprocess_data.rmd` reads. The
+dependency is also circular: `preprocess` needs `remove.csv` → produced by `contaminant_removal` →
+which needs `preclean_text.csv` → written by `preprocess`.
+
+**`remove.csv` is effectively irreplaceable.** The selections in this notebook are hand-picked row
+indices (`slice(c(1, 5, 16, 17, ...))`) with no recorded criterion beyond "visual inspection", and
+those indices are meaningless against any other model fit. If `remove.csv` is lost, the exclusion list
+cannot be reconstructed — it would require re-fitting an early model and re-making every judgement by
+hand. It should be treated as a primary input and backed up accordingly, not as a derived artifact.
+
+**MITIGATED, not resolved** — the notebook now fails immediately with an explanation rather than a
+cryptic missing-file error, and the constraint is documented at the top. The underlying problem
+(unreproducible exclusion list) cannot be fixed after the fact.
+
+### R-3 · Fitted models are absent and expensive to regenerate
+
+None of the five model `.Rda` files is in the repository (correctly — they contain per-document topic
+proportions and the covariate design matrix). Regenerating all five is measured in hours:
+`stm_models_final.Rmd:80` records `manyTopics` alone at **2286 seconds**, and that is one of five
+families.
+
+For verification purposes only `stm.p.*` and `stm.pc.*` are needed — they drive
+`stm_analyses_final.Rmd`, the random forest section, and the exemplars. The `manyTopics` and
+`selectModel` families feed comparison plots only.
+
+---
+
 ## Findings surfaced during extraction
 
 Three defects that static reading missed. All three were found by writing tests against the extracted

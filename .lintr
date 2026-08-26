@@ -1,0 +1,27 @@
+linters: linters_with_defaults(
+    line_length_linter(100),
+    object_name_linter(styles = "snake_case"),
+    object_length_linter(length = 40L),
+    assignment_linter(allow_right_assign = FALSE),
+    commented_code_linter(),
+    todo_comment_linter(),
+    undesirable_function_linter(
+      fun = c(
+        setwd    = "changes global state; build paths with file.path() or use withr::with_dir()",
+        attach   = "masks objects unpredictably; use explicit references",
+        library  = NULL,
+        sapply   = "type-unstable; use vapply() or purrr::map_*()",
+        print    = NULL
+      )
+    ),
+    seq_linter(),
+    vector_logic_linter(),
+    T_and_F_symbol_linter(),
+    semicolon_linter(),
+    expect_type_linter = NULL
+  )
+encoding: "UTF-8"
+exclusions: list(
+    "renv",
+    "packrat"
+  )

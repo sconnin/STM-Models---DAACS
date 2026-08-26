@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# Data artifacts — IRB-PROTECTED. Do not commit.
+#
+# The DAACS corpus contains student essay text joined to demographic
+# covariates. Nothing derived from it belongs in this repository, including
+# "processed" or "cleaned" intermediates: the STM `meta` object carries the
+# essay text and the demographics through every downstream stage.
+#
+# NOTE: .gitignore only affects UNTRACKED files. `processed_corpus_final.Rdata`
+# is currently tracked and is NOT excluded by these rules — removing it from
+# the index and from history is a separate, deliberate step.
+# ---------------------------------------------------------------------------
+
+# R data / model serialization
+*.Rdata
+*.RData
+*.rdata
+*.Rda
+*.rda
+*.rds
+*.RDS
+
+# Pipeline intermediates (preclean_text.csv, stm_data_final.csv, remove.csv, ...)
+*.csv
+
+# Generated essay/passage output trees
+Essay_Passages/
+Top Essays/
+Passages-*/
+
+# Knitted reports — regenerate rather than commit; HTML output embeds
+# data frames printed by `df_print: paged` chunks.
+*.html
+*_files/
+*_cache/
+
+# ---------------------------------------------------------------------------
+# R session and tooling
+# ---------------------------------------------------------------------------
+.Rhistory
+.Rapp.history
+.Rproj.user/
+.Ruserdata
+.Renviron
+*.Rcheck/
+
+# renv: keep the lockfile, ignore the local library
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/sandbox/
+renv/staging/
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db

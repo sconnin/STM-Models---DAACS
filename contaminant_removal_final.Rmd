@@ -21,7 +21,39 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-The purpose of this file is to identify and remove contamination in the DAACS data set. Removal based on visual inspection of early stm modeling runs. See the preprocess_data file. 
+The purpose of this file is to identify and remove contamination in the DAACS data set. Removal based on visual inspection of early stm modeling runs. See the preprocess_data file.
+
+## ⚠️ This notebook is a historical record and cannot be re-run
+
+It reads `topic.prob6_28.Rdata`, an artifact of an early K = 6–28 modelling run.
+**No file in this repository produces it**, and it is not among the saved outputs
+of `stm_models_final.Rmd`. The chunk below will fail on a clean checkout.
+
+Its only output is `remove.csv` — the list of `doc_id`/`institution` pairs judged
+to be contaminant submissions — which `preprocess_data.rmd` reads. As long as
+`remove.csv` is preserved, this notebook does not need to run: it exists to
+document *how* that list was arrived at, not to regenerate it.
+
+That documentation matters, because the selections below are hand-picked row
+indices (`slice(c(1, 5, 16, 17, ...))`) with no recorded criterion beyond "visual
+inspection". Nothing here explains why those particular essays were judged
+contaminant, and the indices are meaningless against any other model fit.
+
+**If `remove.csv` is ever lost**, the exclusion list cannot be reconstructed from
+this file. Rebuilding it would mean re-fitting an early model, re-inspecting
+representative essays, and re-making those judgements by hand. Treat `remove.csv`
+as an irreplaceable input, not a derived artifact. See `CODE_REVIEW.md` R-2.
+
+```{r}
+if (!file.exists("topic.prob6_28.Rdata")) {
+  stop(
+    "topic.prob6_28.Rdata is not present and nothing in this repository ",
+    "produces it. This notebook is a historical record -- see the note above. ",
+    "If you have remove.csv, you do not need to run this file.",
+    call. = FALSE
+  )
+}
+```
 
 ```{r}
 library(tidyverse)

@@ -43,21 +43,36 @@ Separately, `%in% NaN` is not a NaN test: `%in%` uses `match()`, which compares 
 `NaN` does not compare equal to itself. The condition is therefore false for every row, including
 genuine `NaN`s.
 
-Net effect: `alb.srl$srl_grit` is entirely `NA`. Albany then contributes nothing to `srl_grit` in the
-combined `srl.features` frame (L89), so every random forest that uses `srl_grit` as a predictor is
-fitted on WGU + Excelsior only, silently.
+**CORRECTION — this finding overstated its impact.** Checked against the data:
 
-**Recommendation** — express the intent directly, and confirm what the intent actually was. If the
-goal was "convert `NaN` to `NA`":
-
-```r
-mutate(srl_grit = if_else(is.nan(srl_grit), NA_real_, srl_grit))
+```
+WG   rows=13196  non-NA=6386  NaN=0
+EC   rows=10380  non-NA=2966  NaN=54
+Alb  rows=3941   non-NA=0     NaN=490
 ```
 
-If Albany simply has no grit measure, drop the column explicitly and document it, rather than nulling
-it in a way that reads like a transformation.
+Albany has **zero** usable `srl_grit` values *before this line runs*. The column is already empty, so
+the buggy `case_when()` destroys nothing. The conclusion stands — Albany contributes nothing to
+`srl_grit`, and every forest using it is fitted on WGU + Excelsior only — but the cause is missing
+source data, not this line.
 
-**Verify:** `sum(!is.na(alb.srl$srl_grit))` — expect `0` under the current code.
+The line remains wrong and should still be fixed: it has no fallback branch, and `%in% NaN` cannot
+match anything (`NaN` does not compare equal to itself). It would silently null the column the moment
+Albany data did arrive.
+
+**Recommendation** — say what is actually true. Albany has no grit measure; write that down rather
+than expressing it as a transformation that appears to do something:
+
+```r
+# Albany collects no grit measure; the column is present but empty.
+mutate(srl_grit = NA_real_)
+```
+
+Downgraded from a correctness bug to a latent one: no current impact, guaranteed impact if the data
+changes.
+
+**RESOLVED** — replaced with `mutate(srl_grit = NA_real_)`, which states the fact directly. No result
+change: the column was already empty.
 
 ---
 
@@ -121,8 +136,9 @@ unnoticed — but the code does not express that assumption, and it is fragile t
 **Recommendation** — `~ sum(.x, na.rm = TRUE)`. If NAs are genuinely impossible here, assert it
 (`stopifnot(!anyNA(gamma))`) rather than relying on it silently.
 
-**Verify:** `tidy(stm.p.12, matrix = "gamma") %>% summarise(n_na = sum(is.na(gamma)))` — if `0`, the
-published proportions are unaffected and this becomes a robustness fix rather than a correction.
+**RESOLVED** — the five blocks now use `summarise(gamma = sum(gamma, na.rm = TRUE))`. Whether any
+proportion actually moves depends on whether `gamma` contains NAs, which the re-fit will show; either
+way the code no longer depends on an unstated assumption.
 
 ---
 
@@ -148,11 +164,12 @@ n_docs <- n_distinct(tidy_gamma$document)
 mutate(proportion = (gamma / n_docs) * 100)
 ```
 
-**Related, same file:** `stm_models_final.rmd:59` records `#corpus now has 8210 documents, 12440
-words`. The document count is right, but the corpus actually holds **1,254** vocabulary terms, not
-12,440. The comment is stale — most likely written before the `lower.thresh`/`upper.thresh` values at
-L57 were last tuned. Since that comment is the only record of what `prepDocuments()` produced, it
-should be replaced with code that prints the real dimensions.
+**RESOLVED** — the divisor is now `n_documents <- length(documents)`, asserted equal to 8210. Every
+proportion in these five plots moves by a factor of 8210/8120, roughly **1.1% downward**.
+
+**Related, same file:** `stm_models_final.rmd` recorded `#corpus now has 8210 documents, 12440 words`.
+The document count is right; the corpus actually holds **1,254** vocabulary terms. **RESOLVED** — the
+comment is replaced by code that prints the real dimensions, so it cannot go stale again.
 
 ---
 
@@ -163,14 +180,55 @@ should be replaced with code that prints the real dimensions.
 mutate(gender = ifelse(gender %in% c('Female','FEMALE'), 'F', 'M'))
 ```
 
-The `else` branch is unconditional. `NA`, `""`, `"Male"`, `"MALE"`, `"Non-binary"`, `"Prefer not to
-say"`, and any typo or unexpected code all collapse to `"M"`.
+**CONFIRMED, and materially worse than described. This is the most serious finding in the review.**
 
-Note `na.omit()` runs at L219, before this line, so rows with `NA` gender are already dropped — but
-that protects against exactly one of the failure modes, and only by accident of ordering. Any
-category that is neither of the two literal strings is still silently reassigned. `gender` is a
-covariate in every prevalence model and in the `gender*s(age)` interaction, so a misclassification
-propagates into every reported effect.
+The three institutions do not encode gender the same way:
+
+| Institution | Values | n | Recoded to |
+|---|---|---|---|
+| WGU | `Female` | 7,632 | `F` ✓ |
+| | `Male` | 5,556 | `M` ✓ |
+| | `NA` | 8 | `M` |
+| Excelsior | `FEMALE` | 4,210 | `F` ✓ |
+| | `MALE` | 6,170 | `M` ✓ |
+| **Albany** | **`F`** | **2,088** | **`M`** ✗ |
+| | `M` | 1,853 | `M` ✓ |
+
+**Albany encodes gender as single letters.** `"F"` is not in `c("Female", "FEMALE")`, so the
+unconditional `else` branch sends it to `"M"`.
+
+**Every woman at the University at Albany — 2,088 students, 53% of that institution's sample — is
+recoded as male.** They are not dropped or flagged; they are silently relabelled and then modelled as
+men.
+
+`gender` is a prevalence covariate in every model, the content covariate in the `stm.c.*` family, and
+half of the `gender*s(age)` interaction. It is also the covariate behind the `cov.value1 = "F",
+cov.value2 = "M"` contrast plotted as "Effect of Gender". Every gender result in this analysis is
+computed on data where one institution's women are labelled men.
+
+**Recommendation** — enumerate every encoding actually present, and fail loudly on anything else:
+
+```r
+mutate(gender = case_when(
+  gender %in% c("Female", "FEMALE", "F") ~ "F",
+  gender %in% c("Male",   "MALE",   "M") ~ "M",
+  .default = NA_character_
+))
+stopifnot(!anyNA(gender))  # fail rather than silently reassign
+```
+
+**RESOLVED** in `R/covariate_levels.R`, and the effect measured on the real data:
+
+| Institution | n | Recorded female before | After | Reclassified |
+|---|---|---|---|---|
+| WGU | 13,188 | 7,632 | 7,632 | 0 |
+| Excelsior | 10,380 | 4,210 | 4,210 | 0 |
+| **Albany** | 3,941 | **0** | **2,088** | **2,088** |
+
+The fix is surgical — WGU and Excelsior are untouched. Albany goes from zero recorded women to 2,088.
+
+This changes the sample composition of every model and therefore every published gender result. It
+needs a re-fit, and the affected findings need re-checking before they are cited further.
 
 **Recommendation** — enumerate the mapping and fail loudly on anything unexpected:
 
@@ -215,15 +273,57 @@ This connects directly to `stm_analyses_final.Rmd:530`, which contrasts `cov.val
 the recode succeeded, that level doesn't exist and the contrast is invalid; if it failed, it works
 but only for a subset of institutions.
 
-**Recommendation** — replace the chain with one explicit lookup applied uniformly after all
-institution-specific parsing, then assert the resulting level set:
+**CONFIRMED.** Running the recoding chain over each institution's distinct values gives these level
+sets:
+
+| Level after recoding | Present for |
+|---|---|
+| American Indian or Alaska Native | WG, EC |
+| Asian | WG, EC, Alb |
+| **Black** | **WG only** |
+| **Black or African American** | **EC, Alb** |
+| Latinx | WG, EC, Alb |
+| **Native Hawaiian** | **WG only** |
+| **Native Hawaiian or Other Pacific Islander** | **EC only** |
+| Two or More Races | WG, EC, Alb |
+| White | WG, EC, Alb |
+
+**Two groups are split across two labels by institution.** Black students appear as `"Black"` if they
+attend WGU and `"Black or African American"` otherwise. The same split affects Native Hawaiian
+students.
+
+The consequence for `stm_analyses_final.Rmd`: `cov.value1 = "Black"` **does** match a level, so the
+plot renders without error — but it contrasts *WGU Black students only* against White students from
+all three institutions. Institution is confounded with race in that comparison, and nothing on the
+plot says so.
+
+The `str_replace(race, "Black,", ...)` line that was presumably meant to prevent this **never fires
+for any institution**: WGU's value is `"Black"` with no comma, Excelsior's is already
+`"Black or African American"`, and Albany's comma is stripped by the upstream `separate()` before the
+replacement runs. It is dead code that looks like a fix.
+
+**Recommendation** — apply one explicit lookup after all institution-specific parsing, and assert the
+resulting level set so a new encoding fails loudly instead of silently adding a level:
 
 ```r
 stopifnot(all(unique(race) %in% RACE_LEVELS))
 ```
 
-**Verify:** `levels(factor(meta$race))` and `count(meta, institution, race)`. _Needs runtime
-confirmation — this is the finding most likely to change shape once the real values are visible._
+**RESOLVED** in `R/covariate_levels.R`, and the effect measured on the real data:
+
+| Institution | Level merged | n |
+|---|---|---|
+| WGU | `Black` → `Black or African American` | **1,442** |
+| WGU | `Native Hawaiian` → `Native Hawaiian or Other Pacific Islander` | **87** |
+| Excelsior | no change | — |
+| Albany | no change | — |
+
+Distinct race levels drop from **9 to 7**. The 1,442 WGU Black students previously sat in a level of
+their own, separate from Black students at the other two institutions — which is what made the
+`cov.value1 = "Black"` contrast a WGU-only comparison.
+
+Merging changes the composition of the race covariate and therefore every race result. The three race
+contrast plots should be re-checked afterwards.
 
 ---
 
@@ -236,19 +336,19 @@ sum(n_distinct(clean_data$text) < 50)
 ```
 
 `n_distinct()` on a column returns a **single scalar** (the number of distinct essays, ~8,000).
-Comparing that to 50 gives one `FALSE`; `sum()` of one `FALSE` is `0`. The expression returns `0`
-unconditionally and would do so even if every essay were empty.
+Comparing that to 50 gives one logical; `sum()` of one logical is 0 or 1.
+
+**CONFIRMED, with a small correction to the original wording.** The expression does not return `0`
+unconditionally — it returns `1` when the corpus holds fewer than 50 distinct essays and `0`
+otherwise. On this corpus it is `0`. Either way it never counts short essays, so it cannot detect the
+condition its comment describes, and would report "pass" if every essay were a single character.
 
 The intended check — that no essay has fewer than 50 unique words — is already enforced upstream at
 L136-138 inside `cleaner()`. This block is dead code presenting as verification, which is worse than
 no check: it reads like passing evidence.
 
-**Recommendation** — make it a real assertion or delete it:
-
-```r
-n_short <- sum(lengths(lapply(strsplit(clean_data$text, " "), unique)) < 50)
-stopifnot(n_short == 0)
-```
+**RESOLVED** — replaced with a real count plus `stopifnot()`. `cleaner()` already enforces the rule,
+so this now asserts the filter did its job rather than pretending to be the filter.
 
 ---
 
@@ -367,6 +467,11 @@ moment the corpus size changes — which it does every time `remove.csv` is rege
 contaminant-removal loop.
 
 **Recommendation** — derive them: `n <- length(processed$documents); lower.thresh = ceiling(0.01 * n)`.
+
+**DELIBERATELY NOT CHANGED.** Deriving them would alter the vocabulary and therefore every fitted
+model — a larger change than the correctness batch warrants, and one that would confound attribution
+when the models are re-fitted for S1-6/S1-7. The code now prints what percentages 82 and 8128 actually
+represent, so the drift is visible. Converting them is a separate decision.
 
 ### S3-4 · Results recorded in comments rather than captured
 `stm.rforestmodels.final.Rmd:143, 149, 155, 161, 167, 173, 180, 187, 193, 199, 205, 211`
@@ -542,6 +647,128 @@ Pick one convention and apply it uniformly.
 
 ### File extension inconsistency
 `preprocess_data.rmd` and `stm_models_final.rmd` are lowercase; the other four are `.Rmd`.
+
+---
+
+## R — Reproducibility of the pipeline as a whole
+
+The most serious class of finding, and the last to surface: **the committed analysis cannot be
+regenerated from the committed code.** Three files are read that nothing in the repository produces.
+
+### R-1 · The write that three notebooks depend on was commented out
+`preprocess_data.rmd:107`
+
+```r
+# write_csv(preclean_text, 'preclean_text.csv') # write to file for analyses.Rmd
+```
+
+`preclean_text.csv` is read by `contaminant_removal_final.Rmd`, `essay_examples_final.Rmd` and
+`stm_analyses_final.Rmd`. With the only write disabled, none of them runs from a clean checkout.
+
+**RESOLVED** — re-enabled. `preclean_text` is computed either way, so persisting it changes no value
+used downstream; it only stops the pipeline depending on a file nothing produces.
+
+### R-2 · `contaminant_removal_final.Rmd` depends on an artifact nothing produces
+`contaminant_removal_final.Rmd:36` — `load("topic.prob6_28.Rdata")`
+
+That file is the output of an early K = 6–28 modelling run. It is not saved by `stm_models_final.Rmd`
+and is not in the repository. The notebook cannot run.
+
+Its sole output is `remove.csv`, the contaminant exclusion list that `preprocess_data.rmd` reads. The
+dependency is also circular: `preprocess` needs `remove.csv` → produced by `contaminant_removal` →
+which needs `preclean_text.csv` → written by `preprocess`.
+
+**`remove.csv` is effectively irreplaceable.** The selections in this notebook are hand-picked row
+indices (`slice(c(1, 5, 16, 17, ...))`) with no recorded criterion beyond "visual inspection", and
+those indices are meaningless against any other model fit. If `remove.csv` is lost, the exclusion list
+cannot be reconstructed — it would require re-fitting an early model and re-making every judgement by
+hand. It should be treated as a primary input and backed up accordingly, not as a derived artifact.
+
+**MITIGATED, not resolved** — the notebook now fails immediately with an explanation rather than a
+cryptic missing-file error, and the constraint is documented at the top. The underlying problem
+(unreproducible exclusion list) cannot be fixed after the fact.
+
+### R-3 · Fitted models are absent and expensive to regenerate
+
+None of the five model `.Rda` files is in the repository (correctly — they contain per-document topic
+proportions and the covariate design matrix). Regenerating all five is measured in hours:
+`stm_models_final.Rmd:80` records `manyTopics` alone at **2286 seconds**, and that is one of five
+families.
+
+For verification purposes only `stm.p.*` and `stm.pc.*` are needed — they drive
+`stm_analyses_final.Rmd`, the random forest section, and the exemplars. The `manyTopics` and
+`selectModel` families feed comparison plots only.
+
+---
+
+## Findings surfaced during extraction
+
+Three defects that static reading missed. All three were found by writing tests against the extracted
+helpers — none is visible without either running the code or comparing copies mechanically.
+
+### X-1 · Topic labels disagree with themselves inside one document
+`stm_analyses_final.Rmd` — the canonical 12-element vector vs. nine single-topic plot titles
+
+The vector appeared verbatim seven times and all seven were byte-identical. But nine *separate* plot
+titles of the form `main = "Topic N = <label>"` name the same topics, and three of them disagree:
+
+| Topic | Plot title | Canonical vector |
+|---|---|---|
+| 7 | Transferable Strategies **-** Academic Success | Transferable Strategies **&** Academic Success |
+| 9 | Getting Right Getting it Done | Getting **it** Right Getting it Done |
+| 11 | **Applying** and Retaining Subject Matter | **Appying** and Retaining Subject Matter |
+
+Topic 11 is the awkward one: the plot title is spelled correctly and **the canonical vector carries a
+typo**, so the misspelling is the version that appears in six figures and the topic-correlation
+network while the correct spelling appears in one.
+
+**Not resolved.** `R/topic_labels.R` preserves the vector exactly, typo included, because correcting
+it changes figure output. The nine plot titles were left untouched for the same reason. Deciding
+which spelling wins — and applying it in one place — is a one-line change once you make the call.
+
+### X-2 · Top-essay files were written with a spurious frequency column
+`essay_examples_final.Rmd` — inside the former `top.essays()`
+
+```r
+raw.essays <- inner_join(...) %>% select(text) %>% table()
+write.table(raw.essays, file = essay.filename, sep = "\t", row.names = FALSE, col.names = FALSE)
+```
+
+`base::table()` counts occurrences of each distinct essay. Essays are unique, so every count is 1,
+and each line was written as:
+
+```
+"first essay text"	1
+```
+
+— quoted, with a meaningless `1` appended. (The local variable also named `table` did not shadow the
+function: R skips non-function bindings when a name is used in call position.) Verified by running
+both versions against synthetic essays.
+
+**RESOLVED** — `write_top_essays()` uses `writeLines()`. **This changes the contents of every
+top-essay file**, which are described in `essay_examples_final.Rmd` as feeding downstream analysis
+and writeup.
+
+### X-3 · One cleaning pattern only works under ICU, not base R
+`preprocess_data.rmd` — `pattern14`, now `punctuation_except_hyphen`
+
+```r
+"[\\p{P}\\p{S}--[-]]"
+```
+
+The `--` is ICU character-class subtraction. `stringr` uses ICU, so the pipeline works. Base R's TRE
+engine does not merely warn — it **errors**:
+
+```
+invalid regular expression '[\p{P}\p{S}--[-]]', reason 'Invalid character range'
+```
+
+Harmless today because every application goes through `str_replace_all()`. It becomes a defect the
+moment anyone reaches for `grepl()`, `gsub()`, or `sub()` on this pattern, which is an easy and
+invisible mistake to make.
+
+**Documented, not changed** — the constraint is recorded in `R/cleaning_patterns.R` and asserted by a
+test, so it cannot be quietly forgotten.
 
 ---
 

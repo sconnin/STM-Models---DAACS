@@ -28,8 +28,9 @@ library(magrittr)
 library(stm)
 library(randomForest)
 
-# Shared helpers: fit_topic_forests(), topic_importance(), plot_topic_importance()
-source("R/rf_topic_importance.R")
+# Shared helpers
+source("R/rf_topic_importance.R") # fit_topic_forests(), plot_topic_importance()
+source("R/topic_labels.R") # topic_labels(), topic_rename_map()
 ```
 
 Two libraries were dropped here. `tuneR` is an audio-processing package that
@@ -83,7 +84,14 @@ ec.srl <- daacs.ec %>%
 alb.srl <- daacs.ualbany %>%
   select(DAACS_ID, srl_grit, srl_strategies, srl_motivation, srl_metacognition, srl_managing_time, srl_managing_environment, srl_anxiety, srl_mindset, srl_self_efficacy, srl_evaluation, srl_planning, srl_help_seeking, srl_understanding, srl_mastery_orientation) %>%
   rename(doc_id = DAACS_ID) %>%
-  mutate(srl_grit = case_when(srl_grit %in% NaN ~ NA)) %>%
+  # Albany collects no grit measure: 3,941 rows, 0 non-NA, 490 NaN. Stated
+  # directly rather than through a case_when() that appears to transform
+  # something. The previous line -- case_when(srl_grit %in% NaN ~ NA) -- had no
+  # fallback branch and used `%in% NaN`, which never matches because NaN does
+  # not compare equal to itself. It destroyed nothing only because the column
+  # was already empty; it would have emptied it the moment data arrived.
+  # See CODE_REVIEW.md S1-1.
+  mutate(srl_grit = NA_real_) %>%
   mutate(institution = "Alb") %>%
   relocate(institution, .after = doc_id) %>%
   filter(!is.na(srl_strategies))
@@ -213,7 +221,7 @@ views12 <- feedback.views.12 %>%
 # rename columns
 
 views12 %<>%
-  rename(c("Areas for Improvement" = Topic1, "Developing Writing Skills" = Topic2, "Test Anxiety" = Topic3, "Returning Learners-Degree Completion" = Topic4, "Improving Math Skills" = Topic5, "Confirmation and Readiness" = Topic6, "Transferable Strategies & Academic Success" = Topic7, "Time Management" = Topic8, "Getting it Right Getting it Done" = Topic9, "Adjusting Ones Mindset" = Topic10, "Appying and Retaining Subject Matter" = Topic11, "Managing Distractions" = Topic12))
+  rename(all_of(topic_rename_map()))
 
 # clean names
 

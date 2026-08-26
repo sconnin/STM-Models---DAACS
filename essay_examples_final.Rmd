@@ -25,11 +25,16 @@ load libraries
 
 ```{r}
 library(tidyverse)
-library(httr)
 library(magrittr)
 library(stm)
 library(tidytext)
+
+# Shared helpers: write_topic_exemplars(), write_top_essays()
+source("R/exemplars.R")
 ```
+
+`httr` was dropped from this block -- declared here and in two other notebooks,
+never called (`CODE_REVIEW.md` S4).
 
 Load processed corpus and optimized stm models. The latter include models for prevalence and prevalence+content.
 
@@ -69,173 +74,96 @@ original <- inner_join(preclean, filtered, by = c("doc_id", "institution")) %>%
 ```
 
 
-The following block includes a function to identify passages (using findThoughts) that exemplify the topic(s) in the processed text of documents for a given model. Creates a directory to store the results. 
+These blocks previously defined `exemplars()` three times over, differing only in
+output folder, number of documents shown, and text size, plus a fourth
+`top.essays()` sharing the same scaffolding. All four are now one pair of
+helpers in `R/exemplars.R`, which fixes three defects once instead of three
+times:
 
-_The following code needs to be altered for each model of interest._
+- **`setwd()` with no restore.** Each copy changed the working directory and
+  never changed it back, so every later chunk ran somewhere else and an error
+  mid-loop stranded the session in a subdirectory. Paths are now built with
+  `file.path()`; no directory change happens at all.
+- **`for (i in seq_along(topic))`** used a *position* where a *topic number* was
+  meant. Correct only because every caller passed `1:K` -- `exemplars(model, 6,
+  c(3, 7))` would have rendered topics 1 and 2 while labelling them "Topic 1"
+  and "Topic 2".
+- **`findThoughts()` called twice per topic** with identical arguments, the
+  second result discarded. Half the work was wasted.
 
-Arguments of interest:
-
-thresh: Sets a minimum threshold for the estimated topic proportion for displayed documents. It defaults to imposing no restrictions.
-
-n: number of docs to display
-
-
-```{r warning=FALSE}
-# build function to generate exemplar essays for each prevalence model (top 5)
-
-exemplars <- function(model, number, topic) {
-  # create folder to store files
-
-  mainDir <- getwd() # set working directory
-
-  fname <- "Essay_Passages" # folder to create in wd
-
-  dir.create(file.path(mainDir, fname), showWarnings = FALSE) # create the folder as a subdirectory
-
-  dir.create(file.path(mainDir, fname, paste0("Passages_stm.model", number)), showWarnings = FALSE)
-
-  setwd(file.path(mainDir, fname, paste0("Passages_stm.model", number))) # set temporary working directory
-
-  for (i in seq_along(topic)) {
-    png(paste0("Topic", i, ".png")) # create file names for plots
-
-    name <- findThoughts(model, texts = original$text, topics = i, n = 5)$docs[[1]] # this returns preclean text
-    index <- findThoughts(model, texts = original$text, topics = i, n = 5)$index[[1]] # this returns index # for the texts, access via return()/slice()
-    examples <- plotQuote(name,
-      width = 100, maxwidth = 500, text.cex = 1,
-      main = paste0("stm.model.", number, ": Topic ", i)
-    )
-
-    dev.off() # close save plot
-  }
-}
-
-exemplars(stm.model.12, 12, c(1:12)) # number is our model number, topic is list of topics
-```
-
-Repeat this process for content & prevalence to determine if there are any differences
-
-Note: there are differences that may be due to initialization starting points. 
-
-```{r warning=FALSE, fig.width=25}
-# build function to generate exemplar essays for each prevalence model model (top 5)
-
-exemplars <- function(model, number, topic) {
-  # create folder to store files
-
-  mainDir <- getwd() # set working directory
-
-  fname <- "Passages-Prev&Content" # folder to create in wd
-
-  dir.create(file.path(mainDir, fname), showWarnings = FALSE) # create the folder as a subdirectory
-
-  dir.create(file.path(mainDir, fname, paste0("Passages_Con.Prev.Model", number)), showWarnings = FALSE)
-
-  setwd(file.path(mainDir, fname, paste0("Passages_Con.Prev.Model", number))) # set temporary working directory
-
-  for (i in seq_along(topic)) {
-    png(paste0("Topic", i, ".png")) # create file names for plots
-
-    name <- findThoughts(model, texts = original$text, topics = i, n = 4)$docs[[1]] # this returns preclean text
-    index <- findThoughts(model, texts = original$text, topics = i, n = 4)$index[[1]] # this returns index # for the texts, access via return()/slice()
-    examples <- plotQuote(name,
-      width = 100, maxwidth = 500, text.cex = .7,
-      main = paste0("stm.model.", number, ": Topic ", i)
-    )
-
-    dev.off() # close save plot
-  }
-}
-
-
-exemplars(content_prev.model.k6$runout[[1]], 6, c(1:6)) # number is our model number, topic is list of topics
-```
-
-Finally, extract passages using the basic stm models. The resulting files will be used for downstream analyses and writeup.
-
-```{r warning = FALSE}
-# build function to generate exemplar essays for stm basic model (top 5)
-
-exemplars <- function(model, number, topic) {
-  # create folder to store files
-
-  mainDir <- getwd() # set working directory
-
-  fname <- "Passages-basic.stm" # folder to create in wd
-
-  dir.create(file.path(mainDir, fname), showWarnings = FALSE) # create the folder as a subdirectory
-
-  dir.create(file.path(mainDir, fname, paste0("Passages_basic.stm.Model", number)), showWarnings = FALSE)
-
-  setwd(file.path(mainDir, fname, paste0("Passages_basic.stm.Model", number))) # set temporary working directory
-
-  for (i in seq_along(topic)) {
-    png(paste0("Topic", i, ".png")) # create file names for plots
-
-    name <- findThoughts(model, texts = original$text, topics = i, n = 4)$docs[[1]] # this returns preclean text
-    index <- findThoughts(model, texts = original$text, topics = i, n = 4)$index[[1]] # this returns index # for the texts, access via return()/slice()
-    examples <- plotQuote(name,
-      width = 100, maxwidth = 500, text.cex = .7,
-      main = paste0("stm.model.", number, ": Topic ", i)
-    )
-
-    dev.off() # close save plot
-  }
-}
-
-
-exemplars(stm.pc.32, 32, c(1:32)) # number is our model number, topic is list of topics
-```
-
-Write top 5 representative essays (raw data) by model and topic to file. Note, the essays extracted here come from the basic stm models - which include prevalence and content formula. The decision to use this set of files owes to results and downstream analyses described in the file analyses6_32.
+`write_top_essays()` also changes what it writes. The original piped essays
+through `base::table()` before `write.table()`, which counted occurrences of
+each distinct essay -- always 1, since essays are unique -- and emitted
+`"essay text"\t1` per line. It now writes the essay text plainly, which is
+evidently what was intended. See `CODE_REVIEW.md`.
 
 ```{r warning=FALSE}
-# create document table with and meta variables for stm_18
+# Optimized prevalence model (manyTopics)
+write_topic_exemplars(
+  stm.model.12,
+  model_label = "stm.model.12",
+  topics = 1:12,
+  texts = original$text,
+  collection = "Essay_Passages",
+  n = 5,
+  text_cex = 1
+)
+```
 
+Repeat for prevalence & content, to see whether the exemplars differ. Note there
+are differences, which may owe to different initialization starting points.
+
+```{r warning=FALSE}
+write_topic_exemplars(
+  content_prev.model.k6$runout[[1]],
+  model_label = "content_prev.model.k6",
+  topics = 1:6,
+  texts = original$text,
+  collection = "Passages-Prev&Content",
+  n = 4,
+  text_cex = 0.7
+)
+```
+
+Finally, extract passages from the basic stm models. These files are used for
+downstream analyses and writeup.
+
+```{r warning=FALSE}
+write_topic_exemplars(
+  stm.pc.32,
+  model_label = "stm.pc.32",
+  topics = 1:32,
+  texts = original$text,
+  collection = "Passages-basic.stm",
+  n = 4,
+  text_cex = 0.7
+)
+```
+
+Write the top 5 representative essays (raw text) per model and topic to file.
+These come from the basic stm models, which include prevalence and content
+formulas -- see the results discussed in stm_analyses_final.
+
+```{r warning=FALSE}
 identifiers <- meta %>% select(doc_id, institution)
 
-# build function to generate original essays for each topic (top 5)
+topic_tables <- list(
+  "stm.pc.6" = make.dt(stm.pc.6, meta = identifiers),
+  "stm.pc.12" = make.dt(stm.pc.12, meta = identifiers),
+  "stm.pc.18" = make.dt(stm.pc.18, meta = identifiers),
+  "stm.pc.24" = make.dt(stm.pc.24, meta = identifiers),
+  "stm.pc.32" = make.dt(stm.pc.32, meta = identifiers)
+)
 
-top.essays <- function(model, K, id, topic, raw.data) {
-  # create folder to store files
-
-  mainDir <- getwd() # set working directory
-
-  fname <- "Top Essays" # folder to create in wd
-
-  dir.create(file.path(mainDir, fname), showWarnings = FALSE) # create the folder as a subdirectory
-
-  dir.create(file.path(mainDir, fname, paste0("Essays.Model", K)), showWarnings = FALSE)
-
-  setwd(file.path(mainDir, fname, paste0("Essays.Model", K))) # set temporary working directory
-
-  table <- make.dt(model, meta = id) %>% # table with document proportions
-    relocate(c(doc_id, institution), .after = docnum)
-
-  for (i in seq_along(topic)) {
-    topic.pointer <- paste0("Topic", i) # update topic number
-
-    subset <- table %>%
-      select(doc_id, institution, topic.pointer)
-
-    top5 <- subset[order(-subset[, 3]), ] %>% # arrange subset by topic col, could not get this to work with dplyr arrange without hardcoding col name
-      slice(1:5)
-
-    raw.essays <- inner_join(raw.data, top5, by = c("doc_id", "institution")) %>%
-      select(text) %>%
-      table()
-
-    essay.filename <- paste0("topic", i, "essays.txt")
-
-    write.table(raw.essays, file = essay.filename, sep = "\t", row.names = FALSE, col.names = FALSE)
-  }
+for (label in names(topic_tables)) {
+  k <- as.integer(sub("stm[.]pc[.]", "", label))
+  write_top_essays(
+    topic_table = topic_tables[[label]],
+    topics = seq_len(k),
+    raw_data = original,
+    model_label = label,
+    collection = "Top Essays",
+    n = 5
+  )
 }
-
-# write top 5 representative essays for each model and topic to file
-
-top.essays(stm.pc.6, 6, identifiers, c(1:6), original)
-top.essays(stm.pc.12, 12, identifiers, c(1:12), original)
-top.essays(stm.pc.18, 18, identifiers, c(1:18), original)
-top.essays(stm.pc.24, 24, identifiers, c(1:24), original)
-top.essays(stm.pc.32, 32, identifiers, c(1:32), original)
 ```

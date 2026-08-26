@@ -1,6 +1,9 @@
 linters: linters_with_defaults(
     line_length_linter(100),
-    object_name_linter(styles = "snake_case"),
+    # SNAKE_CASE is allowed alongside snake_case so package-level constants
+    # (TOPIC_LABELS_K12, ESSAY_CLEANING_PATTERNS) can be visibly distinguished
+    # from ordinary variables, which is the widespread R convention.
+    object_name_linter(styles = c("snake_case", "SNAKE_CASE")),
     object_length_linter(length = 40L),
     assignment_linter(),
     commented_code_linter(),
@@ -20,5 +23,11 @@ linters: linters_with_defaults(
 encoding: "UTF-8"
 exclusions: list(
     "renv",
-    "packrat"
+    "packrat",
+    ".scratch",
+    # This file is generated from the pattern definitions in preprocess_data.rmd
+    # and holds regex literals up to 833 characters. They cannot be wrapped
+    # without altering the strings, and altering them changes which essays
+    # survive the corpus filter. Length is exempted here and nowhere else.
+    "R/cleaning_patterns.R" = list(line_length_linter = Inf)
   )

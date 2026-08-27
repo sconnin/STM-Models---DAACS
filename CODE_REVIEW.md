@@ -565,6 +565,17 @@ model — a larger change than the correctness batch warrants, and one that woul
 when the models are re-fitted for S1-6/S1-7. The code now prints what percentages 82 and 8128 actually
 represent, so the drift is visible. Converting them is a separate decision.
 
+**Measured on the re-fit: the drift has not occurred.** The corrected corpus still holds 8,210
+documents, so the reported percentages are 1.00% and 99.00% — exactly what the prose claims. The
+concern was that these values *would* drift silently, not that they already had; that remains true
+of any future change to `remove.csv` or the cleaning filters, and the printed report will now catch
+it. Corpus after `prepDocuments()`: **8,210 documents, 1,254 vocabulary terms** (11,186 of 12,440
+terms dropped by the frequency filter).
+
+This also settles a stale comment noted under S1-5: the old text claimed "8210 documents, 12440
+words". 12,440 was the vocabulary *before* frequency filtering; the corpus the models actually see
+holds 1,254 terms.
+
 ### S3-4 · Results recorded in comments rather than captured
 `stm.rforestmodels.final.Rmd:143, 149, 155, 161, 167, 173, 180, 187, 193, 199, 205, 211`
 
@@ -941,6 +952,42 @@ called `6_32` holding only K = 12 would have added another.
 hand against the old, uncorrected model. The corrected corpus may shift what the twelve topics
 contain. Compare `labelTopics()` output against the assigned labels before reusing them in any
 write-up — a judgement call for the project owner, not a mechanical check.
+
+**The re-fit has now run, and two labels do not survive it.** STM topic numbering is arbitrary and
+depends on the fit, so positional labels are not portable across re-fits by construction. Ten of
+twelve still describe their topic well. Two do not:
+
+| # | Assigned label | FREX terms from the corrected fit | Assessment |
+|---|---|---|---|
+| 1 | Areas for Improvement | assign, evalu, ask, monitor, approach, suggest, list, learn | Reads as self-evaluation and monitoring, not "areas for improvement" |
+| 5 | **Improving Math Skills** | area, weak, assess, strength, improv, identifi, surpris, strong | **No mathematics vocabulary at all.** This is a strengths-and-weaknesses topic — it is what "Areas for Improvement" describes |
+
+Topic 5's vocabulary matches topic 1's *label*, which suggests the two are transposed relative to the
+fit the labels were written against — or that the corrected data has reorganised them. Note also that
+the only mathematics term in the model (`math`) appears in **topic 2**, labelled "Developing Writing
+Skills", alongside `write`, `essay`, `paper`, `text`.
+
+The other ten hold up, several strikingly: 3 (test, anxieti, relax, exam, worri, stress), 10 (growth,
+intellig, mindset, fix, mistak), 11 (materi, subject, concept, retain, comprehend), 12 (phone,
+procrastin, distract, interrupt, quiet).
+
+**Do not reuse the labels as-is.** They are consumed in six plots in `stm_analyses_final.Rmd` and as
+the rename map in `stm.rforestmodels.final.Rmd`, so a mismatch propagates into every figure and the
+random-forest variable names. Re-assign by inspecting the exemplar essays from
+`essay_examples_final.Rmd` against the new fit, as was done originally. The old fit was unseeded and
+cannot be recovered for comparison (S3-1), so this cannot be resolved by diffing against it.
+
+Mean topic proportions from the corrected fit, for reference:
+
+| Topic | Proportion | Topic | Proportion |
+|---|---:|---|---:|
+| 9 | 16.10% | 12 | 7.79% |
+| 8 | 12.54% | 11 | 7.43% |
+| 1 | 11.37% | 6 | 6.79% |
+| 7 | 10.02% | 5 | 5.64% |
+| 4 | 8.65% | 3 | 5.48% |
+| | | 10 | 4.17% |
+| | | 2 | 4.03% |
 
 ---
 

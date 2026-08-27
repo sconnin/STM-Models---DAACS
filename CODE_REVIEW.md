@@ -383,40 +383,57 @@ no check: it reads like passing evidence.
 
 ---
 
-### S1-9 · The 50-unique-word floor is enforced mid-chain, so it does not hold of the final text
+### S1-9 · The junk-submission filter can be defeated by boilerplate padding
 `preprocess_data.rmd:161-168`
 
 Found while running the pipeline for the first time, when the `stopifnot()` added under S1-8 failed.
 
-`cleaner()` counts unique words and drops short essays at L161-162 — but **four more substitutions
-run afterwards**:
+**Purpose of this check, stated by the project owner:** the 50-*unique*-word floor exists to catch
+junk entries — students who submitted repeated filler or near-nothing rather than a genuine essay.
+Counting unique words (not total length) is what makes it a repetition/substance detector rather than
+a length check.
+
+**The gap.** `cleaner()` counts unique words and drops short essays at L161-162 — but **four more
+substitutions run afterwards**, stripping essay-prompt boilerplate and instructional text:
 
 ```r
 mutate(count = lengths(map(strsplit(text, split = " "), unique))) %>%
-filter(!count < 50) %>%          # <- floor enforced HERE
+filter(!count < 50) %>%          # <- floor enforced HERE, against boilerplate-inflated text
 select(!count) %>%
 mutate(text = str_replace_all(text, pattern17, " ")) %>%
 filter(!str_detect(text, pattern = pattern18)) %>%
 mutate(text = str_replace_all(text, pattern19, "")) %>%
 mutate(text = str_replace_all(text, pattern20, "")) %>%
-mutate(text = str_replace_all(text, pattern21, ""))   # <- text still shrinking
+mutate(text = str_replace_all(text, pattern21, ""))   # <- boilerplate removed HERE, after the check
 ```
 
-An essay can clear the threshold when it is measured and fall below it once patterns 17/19/20/21
-strip further text. The filter therefore guarantees a property of an **intermediate** state, not of
-the data that reaches the models.
+Prompt/instructional boilerplate is lexically varied, so it can push an essay's unique-word count
+*above* 50 at check time even when the student's own contribution is minimal. The check runs before
+that boilerplate is stripped, so an essay can be counted, and cleared, on the strength of text that
+isn't the student's — the exact failure mode the filter exists to catch.
 
-**CONFIRMED against the real corpus: 3 of 8,265 essays (0.04%) finish below the floor.** The minimum
-is not far under it, so the practical impact is negligible — but the invariant the code appears to
-establish is not the one it establishes.
+**CONFIRMED against the real corpus.** 3 of 8,265 essays finish below the floor in the final text:
 
-This is exactly the order-dependence `CLAUDE.md` warns about: "Reordering can change which text
-survives the ≥50-unique-word filter."
+| Mid-chain unique words (what the check saw) | Final unique words | Words removed by patterns 17/19/20/21 |
+|---:|---:|---:|
+| 52 | 38 | 14 |
+| 67 | 48 | 19 |
+| 50 | 48 | 2 |
 
-**DOCUMENTED, NOT FIXED.** Moving the count to the end of the chain would drop three more essays and
-change the corpus from 8,210 documents — a modelling decision, not a QA fix, and one that would
-invalidate the `n_documents == 8210` assertion and every published proportion. The QA block now
-reports the count and the minimum instead of asserting zero. Decide this alongside the re-fit.
+The boilerplate contribution here is modest (4–19 words), not the dramatic "essay is mostly prompt
+text" scenario the mechanism suggests is possible — but it is real, and in the same direction the
+concern predicts.
+
+**Checked against the hand-curated contamination list (`remove.csv`).** 2 of the 3 are already
+flagged there by the manual visual-inspection process in `contaminant_removal_final.Rmd` — so they
+are already excluded from modelling by a different mechanism. **1 of the 3 is not caught by any
+existing process** and currently sits in the modelling corpus.
+
+**DOCUMENTED, NOT FIXED.** Moving the count to the end of the chain would drop the 1 uncaught essay
+(the other 2 are already excluded via `remove.csv`) and change the corpus from 8,210 documents — a
+modelling decision, not a QA fix, and one that would invalidate the `n_documents == 8210` assertion
+and every published proportion. The QA block reports the count and the minimum instead of asserting
+zero. Decide this alongside the re-fit; the practical stakes are one essay, not three.
 
 ---
 

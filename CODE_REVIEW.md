@@ -953,29 +953,60 @@ hand against the old, uncorrected model. The corrected corpus may shift what the
 contain. Compare `labelTopics()` output against the assigned labels before reusing them in any
 write-up — a judgement call for the project owner, not a mechanical check.
 
-**The re-fit has now run, and two labels do not survive it.** STM topic numbering is arbitrary and
-depends on the fit, so positional labels are not portable across re-fits by construction. Ten of
-twelve still describe their topic well. Two do not:
+**The re-fit has now run. Eleven of twelve labels hold; one warrants review.**
 
-| # | Assigned label | FREX terms from the corrected fit | Assessment |
-|---|---|---|---|
-| 1 | Areas for Improvement | assign, evalu, ask, monitor, approach, suggest, list, learn | Reads as self-evaluation and monitoring, not "areas for improvement" |
-| 5 | **Improving Math Skills** | area, weak, assess, strength, improv, identifi, surpris, strong | **No mathematics vocabulary at all.** This is a strengths-and-weaknesses topic — it is what "Areas for Improvement" describes |
+> **Correction.** An earlier version of this section claimed topic 5 had "no mathematics vocabulary
+> at all" and that topics 1 and 5 appeared transposed. **That was wrong**, and the error was
+> methodological: it read only the `prob` and `frex` metrics. `labelTopics()` returns four, and the
+> other two — `lift` and `score` — surface low-frequency but highly distinctive terms, which is
+> precisely what identifies a topic's subject matter. Both show mathematics vocabulary in topic 5.
+> **Always read all four metrics before judging a topic.**
 
-Topic 5's vocabulary matches topic 1's *label*, which suggests the two are transposed relative to the
-fit the labels were written against — or that the corrected data has reorganised them. Note also that
-the only mathematics term in the model (`math`) appears in **topic 2**, labelled "Developing Writing
-Skills", alongside `write`, `essay`, `paper`, `text`.
+### Topic 5 — "Improving Math Skills" is supported
 
-The other ten hold up, several strikingly: 3 (test, anxieti, relax, exam, worri, stress), 10 (growth,
-intellig, mindset, fix, mistak), 11 (materi, subject, concept, retain, comprehend), 12 (phone,
-procrastin, distract, interrupt, quiet).
+| Metric | Terms |
+|---|---|
+| prob | area, improv, assess, weak, strength, skill, need, strong, see, well |
+| frex | area, weak, assess, strength, improv, identifi, surpris, strong, recommend, tool |
+| **lift** | **mathemat, equat**, weaker, weakest, area, link, weak, **retak**, strength, **calcul** |
+| **score** | **mathemat**, area, assess, improv, weak, strength, identifi, surpris, **equat**, recommend |
 
-**Do not reuse the labels as-is.** They are consumed in six plots in `stm_analyses_final.Rmd` and as
-the rename map in `stm.rforestmodels.final.Rmd`, so a mismatch propagates into every figure and the
-random-forest variable names. Re-assign by inspecting the exemplar essays from
-`essay_examples_final.Rmd` against the new fit, as was done originally. The old fit was unseeded and
-cannot be recovered for comparison (S3-1), so this cannot be resolved by diffing against it.
+On the model's word-topic weights, `mathemat` loads highest on topic 5 (0.0027) and is essentially
+absent elsewhere; `equat` likewise (0.0020). The topic reads as *students discussing their
+mathematics assessment results* — weakest areas, retaking, equations, calculations. The label stands.
+
+### Topic 2 — "Developing Writing Skills" is supported
+
+`lift`: writer, english, paper, essay, word, write, written, reader, languag, paragraph. Unambiguous.
+The colloquial `math` does appear in topic 2's `prob` terms and loads higher there (0.0146) than in
+topic 5 — students name reading, writing and mathematics together when describing their assessments —
+but the formal mathematics stems belong to topic 5.
+
+### Topic 1 — "Areas for Improvement" is the weak fit
+
+| Metric | Terms |
+|---|---|
+| prob | learn, evalu, improv, assign, plan, use, can, ask, monitor, help |
+| frex | assign, evalu, ask, monitor, approach, suggest, list, learn, way, best |
+| lift | frequenc, brainstorm, **self-monitor**, suppos, assign, approach, list, **self-evalu**, react, schoolwork |
+| score | frequenc, learn, assign, monitor, evalu, improv, ask, approach, suggest, plan |
+
+Across all four metrics this reads as **self-monitoring and study strategy** — `self-monitor`,
+`self-evalu`, `brainstorm`, `assign`, `schoolwork` — rather than "areas for improvement", which is
+closer to what topic 5 expresses. It has the best semantic coherence of any topic (-17.49) and the
+third-largest share (11.37%), so it is a well-formed topic that is simply named imprecisely.
+
+**Recommendation:** review topic 1 against its exemplars in
+`Essay_Passages/stm.p.12/Topic1.png` and consider a name closer to
+"Self-Monitoring and Study Strategies". Leave the other eleven as they are.
+
+The remaining labels hold up, several strikingly: 3 (test, anxieti, relax, exam, worri, stress),
+10 (growth, intellig, mindset, fix, mistak), 11 (materi, subject, concept, retain, comprehend),
+12 (phone, procrastin, distract, interrupt, quiet).
+
+Because the labels feed six plots in `stm_analyses_final.Rmd` and the rename map in
+`stm.rforestmodels.final.Rmd`, any change propagates into every figure and the random-forest variable
+names — so make the decision once, in `R/topic_labels.R`, rather than at the call sites.
 
 Mean topic proportions from the corrected fit, for reference:
 

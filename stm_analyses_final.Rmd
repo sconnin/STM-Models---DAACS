@@ -45,8 +45,13 @@ library(huge) # network graph
 library(tidytext)
 library(patchwork)
 
-# Shared helpers: TOPIC_LABELS_K12, topic_labels()
-source("R/topic_labels.R")
+# Shared helpers. Every computation this notebook repeats across model families
+# is defined once in R/ and tested in tests/testthat/.
+source("R/topic_labels.R") # TOPIC_LABELS_K12, topic_labels()
+source("R/topic_prevalence.R") # topic_proportions(), plot_topic_proportions()
+source("R/topic_word_tables.R") # topic_word_table(), topic_word_tables()
+source("R/covariate_effects.R") # estimate_effects(), significant_effects(), plots
+source("R/multiple_comparisons.R") # adjust_effects(), joint_effect_test()
 ```
 
 Two libraries were dropped from this block. `httr` was declared here and in two
@@ -229,8 +234,11 @@ Note that the results will also be different from the optimized model built on p
 # Each document's topic proportions sum to 1, so summing gamma across documents
 # and dividing by the document count gives the mean proportion per topic.
 #
-# Two corrections here (CODE_REVIEW.md S1-4, S1-5), both of which change every
-# proportion these five blocks plot:
+# Five near-identical blocks stood here, one per model family, differing only in
+# which model they read and what the subtitle said. They are now one call each to
+# topic_proportions() + plot_topic_proportions() (R/topic_prevalence.R), which is
+# also where the two corrections live rather than being repeated five times
+# (CODE_REVIEW.md S1-4, S1-5):
 #
 #   - The divisor was hard-coded as 8120. The corpus holds 8210 documents --
 #     the same digits transposed. It is now derived, and asserted against the
@@ -240,82 +248,43 @@ Note that the results will also be different from the optimized model built on p
 n_documents <- length(documents)
 stopifnot(n_documents == 8210)
 
-# plot k = 12, optimized prevalence formula
+prevalence_specifications <- list(
+  list(
+    model = stm.model.12,
+    title = "Topic Prevalence within Corpus: K = 12",
+    subtitle = "Topic Prevalence: manyTopics()"
+  ),
+  list(
+    model = content_prev.model.k12$runout[[1]],
+    title = "Topic Prevalence: K = 12, Model 1",
+    subtitle = "Prevalence & Content: selectModel()"
+  ),
+  list(
+    model = content_prev.model.k12$runout[[2]],
+    title = "Topic Prevalence: K = 12, Model 2",
+    subtitle = "Prevalence & Content: selectModel()"
+  ),
+  list(
+    model = stm.pc.12,
+    title = "Topic Prevalence: K = 12",
+    subtitle = "Prevalence & Content: stm()"
+  ),
+  list(
+    model = stm.p.12,
+    title = "Topic Prevalence: K = 12",
+    subtitle = "Prevalence: stm()"
+  )
+)
 
-multi.p.12 <- tidy(stm.model.12, matrix = "gamma") %>%
-  group_by(topic) %>%
-  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
-  mutate(proportion = (gamma / n_documents) * 100)
+prevalence_plots <- lapply(prevalence_specifications, function(spec) {
+  plot_topic_proportions(
+    topic_proportions(spec$model, n_documents),
+    title = spec$title,
+    subtitle = spec$subtitle
+  )
+})
 
-multi.p.12$topic <- factor(multi.p.12$topic, levels = multi.p.12[order(multi.p.12$proportion, decreasing = FALSE), ]$topic)
-
-m1 <- multi.p.12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_col(alpha = 0.8, show.legend = FALSE) +
-  labs(title = "Topic Prevalence within Corpus: K = 12", subtitle = "Topic Prevalence: manyTopics()", y = "Proportion (%)", x = "Topic") +
-  coord_flip() +
-  theme_classic()
-
-# plot k = 12, prevalence & content: optimized model = 1
-
-select.pc.12.1 <- tidy(content_prev.model.k12$runout[[1]], matrix = "gamma") %>%
-  group_by(topic) %>%
-  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
-  mutate(proportion = (gamma / n_documents) * 100)
-
-select.pc.12.1$topic <- factor(select.pc.12.1$topic, levels = select.pc.12.1[order(select.pc.12.1$proportion, decreasing = FALSE), ]$topic)
-
-m2 <- select.pc.12.1 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_col(alpha = 0.8, show.legend = FALSE) +
-  labs(title = "Topic Prevalence: K = 12, Model 1", subtitle = "Prevalence & Content: selectModel()", y = "Proportion (%)", x = "Topic") +
-  coord_flip() +
-  theme_classic()
-
-# plot k = 12, optimized prevalence & content: run = 2
-
-select.pc.12.2 <- tidy(content_prev.model.k12$runout[[2]], matrix = "gamma") %>%
-  group_by(topic) %>%
-  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
-  mutate(proportion = (gamma / n_documents) * 100)
-
-select.pc.12.2$topic <- factor(select.pc.12.2$topic, levels = select.pc.12.2[order(select.pc.12.2$proportion, decreasing = FALSE), ]$topic)
-
-m3 <- select.pc.12.2 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_col(alpha = 0.8, show.legend = FALSE) +
-  labs(title = "Topic Prevalence: K = 12, Model 2", subtitle = "Prevalence & Content: selectModel()", y = "Proportion (%)", x = "Topic") +
-  coord_flip() +
-  theme_classic()
-
-# plot k = 12, prevalence & content single model
-
-stm.pc.k12 <- tidy(stm.pc.12, matrix = "gamma") %>%
-  group_by(topic) %>%
-  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
-  mutate(proportion = (gamma / n_documents) * 100)
-
-stm.pc.k12$topic <- factor(stm.pc.k12$topic, levels = stm.pc.k12[order(stm.pc.k12$proportion, decreasing = FALSE), ]$topic)
-
-m4 <- stm.pc.k12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_col(alpha = 0.8, show.legend = FALSE) +
-  labs(title = "Topic Prevalence: K = 12", subtitle = "Prevalence & Content: stm()", y = "Proportion (%)", x = "Topic") +
-  coord_flip() +
-  theme_classic()
-
-# plot k = 12, prevalence single model
-
-stm.p.k12 <- tidy(stm.p.12, matrix = "gamma") %>%
-  group_by(topic) %>%
-  summarise(gamma = sum(gamma, na.rm = TRUE), .groups = "drop") %>%
-  mutate(proportion = (gamma / n_documents) * 100)
-
-stm.p.k12$topic <- factor(stm.p.k12$topic, levels = stm.p.k12[order(stm.p.k12$proportion, decreasing = FALSE), ]$topic)
-
-m5 <- stm.p.k12 %>% ggplot(aes(x = topic, y = proportion, fill = proportion)) +
-  geom_col(alpha = 0.8, show.legend = FALSE) +
-  labs(title = "Topic Prevalence: K = 12", subtitle = "Prevalence: stm()", y = "Proportion (%)", x = "Topic") +
-  coord_flip() +
-  theme_classic()
-
-m1 | m2 | m3 | m4 | m5
+patchwork::wrap_plots(prevalence_plots, nrow = 1)
 ```
 
 Four different types of word weightings are printed with label topics.
@@ -350,34 +319,24 @@ sageLabels(stm.pc.12)
 sageLabels(stm.p.12)
 
 # create tables for top word categories == stm prevalence model
-
-# One function replaces four near-identical blocks that differed only in which
-# element of labelTopics() they read and what the caption said. `kable()` is
-# knitr's, not kableExtra's.
-topic_word_table <- function(label_metric, metric_name) {
-  label_metric %>%
-    as.data.frame() %>%
-    rownames_to_column(var = "topic") %>%
-    unite(collapse, !1, remove = FALSE, sep = ", ") %>%
-    rename(top_words = collapse) %>%
-    select(topic, top_words) %>%
-    knitr::kable(
-      caption = paste0('Top Topic Words - "', metric_name, '": STM Prevalence Model')
-    )
-}
-
-lab12.prob.stm <- topic_word_table(l12.d[1], "Probability")
-lab12.frex.stm <- topic_word_table(l12.d[2], "FREX")
-lab12.lift.stm <- topic_word_table(l12.d[3], "Lift")
-lab12.score.stm <- topic_word_table(l12.d[4], "Score")
+#
+# Four near-identical blocks stood here, differing only in which element of
+# labelTopics() they read and what the caption said. topic_word_tables()
+# (R/topic_word_tables.R) returns all four, named.
+lab12.stm <- topic_word_tables(l12.d)
 
 
 # compare tables
+#
+# Read all four before judging what a topic is about. prob and frex favour
+# frequent terms; lift and score surface the low-frequency, distinctive terms
+# that identify the subject. Reading only the first two led to topic 5 being
+# called mathematics-free when lift and score both lead with `mathemat`.
 
-lab12.prob.stm
-lab12.frex.stm
-lab12.lift.stm
-lab12.score.stm
+lab12.stm$prob
+lab12.stm$frex
+lab12.stm$lift
+lab12.stm$score
 
 
 # another way to plot - plotSTM() cant assign label type to formulas with content
@@ -479,36 +438,111 @@ This process leverages the meta file to predict prevalence. A model specified fo
 
 ```{r}
 # covariate statistics
+#
+# Four estimateEffect() calls and four tidy-and-filter blocks stood here,
+# identical but for the covariate. estimate_effects() and significant_effects()
+# (R/covariate_effects.R) hold the shared arguments -- notably
+# uncertainty = "Global", which propagates topic-proportion uncertainty into the
+# standard errors and would narrow every interval reported if it were dropped
+# from one copy.
 
-gender.pred <- estimateEffect(formula = 1:12 ~ gender, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+# estimateEffect(uncertainty = "Global") draws posterior samples and its
+# summary() simulates on top of them, so these estimates are stochastic. Without
+# a seed the F statistics and the count of terms clearing 0.05 both move between
+# runs -- the same class of defect as the unseeded model fits in S3-1.
+set.seed(20220527)
 
-race.pred <- estimateEffect(formula = 1:12 ~ race, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+covariate.preds <- estimate_effects(
+  model = stm.p.12,
+  metadata = meta,
+  formulas = list(
+    gender = 1:12 ~ gender,
+    race = 1:12 ~ race,
+    first_gen = 1:12 ~ first_gen,
+    age = 1:12 ~ s(age)
+  )
+)
 
-first.gen.pred <- estimateEffect(formula = 1:12 ~ first_gen, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
-
-age.pred <- estimateEffect(formula = 1:12 ~ s(age), stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
+gender.pred <- covariate.preds$gender
+race.pred <- covariate.preds$race
+first.gen.pred <- covariate.preds$first_gen
+age.pred <- covariate.preds$age
 
 
 # tidy format - filter for significant effects
+#
+# UNCORRECTED. Kept only as the comparison for the adjusted results below --
+# every number here is one of 228 tests, so roughly eleven of the terms that
+# clear 0.05 are expected to do so by chance. Do not report from this.
 
-tidy(gender.pred) %>%
-  filter(term != "(Intercept)" & p.value < 0.05)
+lapply(covariate.preds, significant_effects)
 
-tidy(race.pred) %>%
-  filter(term != "(Intercept)" & p.value < 0.05)
-
-tidy(first.gen.pred) %>%
-  filter(term != "(Intercept)" & p.value < 0.05)
-
-tidy(age.pred) %>%
-  filter(term != "(Intercept)" & p.value < 0.05)
-
-# summary format -- hash: topics with signf at 0.05
+# summary format -- hash: topics with signf at 0.05, uncorrected
+#
+# The trailing comments record what the ORIGINAL, uncorrected analysis found.
+# They are kept as a record of what changed, not as results.
 
 gp <- summary(gender.pred) # 1,2,3,5,7,8,9,11,12
 rp <- summary(race.pred) # 2, 4,7,9
 fgp <- summary(first.gen.pred) # 7,8,9,12
 ag <- summary(age.pred) # 1, 3, 4, 5, 7, 8, 9, 10, 12
+```
+
+### Multiple comparisons
+
+Every covariate is tested against all twelve topics. Counted the way the filter
+above counts them that is **228 hypotheses** — 12 for gender, 72 for race across
+its seven levels, 24 for first-generation status across its three, and 120 for
+age, because `s(age)` expands to a ten-term spline. At an uncorrected 0.05
+roughly eleven terms would clear the bar from noise alone.
+
+Three responses, applied together rather than chosen between
+(`R/multiple_comparisons.R`):
+
+1. **Say what this is.** These results are exploratory and are reported as such.
+2. **Control the false discovery rate** within each covariate family, rather than
+   the family-wise error rate — the question is what fraction of the reported
+   topics are spurious, not whether any single one is certain.
+3. **Ask each question once.** Race enters as six contrasts and age as ten spline
+   terms, so a term-level filter asks the wrong question repeatedly. A joint Wald
+   test asks it once per topic, and reproduces the marginal t-test exactly when a
+   covariate has only one term.
+
+```{r}
+# 1. the caveat, held in one place so every write-up states the same thing
+
+cat(exploratory_note(alpha = 0.05), fill = TRUE)
+
+# 2. Benjamini-Hochberg within each covariate family
+
+adjusted.preds <- lapply(covariate.preds, adjust_effects)
+
+# how much the adjustment changes -- raw count vs surviving count
+data.frame(
+  covariate = names(covariate.preds),
+  terms = vapply(adjusted.preds, nrow, integer(1)),
+  uncorrected = vapply(covariate.preds, \(e) nrow(significant_effects(e)), integer(1)),
+  fdr_05 = vapply(covariate.preds, \(e) nrow(significant_effects_adjusted(e)), integer(1)),
+  row.names = NULL
+)
+
+# 3. one joint test per topic for the multi-term covariates
+
+# first_gen is split on purpose. It has three levels, and UNKNOWN is almost
+# entirely Excelsior -- 622 of 632 such documents, with none at WGU. Institution
+# is not a covariate in these models, so pooling UNKNOWN into one joint test
+# would report a first-generation effect that is partly an institution effect.
+# TRUE vs FALSE is the substantive question; UNKNOWN vs FALSE is a missingness
+# diagnostic.
+joint.tests <- list(
+  gender = joint_effect_test(gender.pred, "^gender"),
+  race = joint_effect_test(race.pred, "^race"),
+  first_gen_true = joint_effect_test(first.gen.pred, "^first_genTRUE"),
+  first_gen_unknown = joint_effect_test(first.gen.pred, "^first_genUNKNOWN"),
+  age = joint_effect_test(age.pred, "^s\\(age\\)")
+)
+
+joint.tests
 ```
        
 
@@ -523,14 +557,11 @@ Second Plot - Topical content: plot the influence of covariates as a topical con
 
 tidy(gender.pred)
 
-plot(gender.pred,
-  covariate = "gender", topics = c(1:12), cex = .25,
-  model = stm.p.12, method = "difference",
-  cov.value1 = "F", cov.value2 = "M",
+plot_difference_effect(gender.pred,
+  covariate = "gender", value1 = "F", value2 = "M",
   xlab = "More Male ... More Female",
   main = "Effect of Gender: K=12 Prevalence",
-  xlim = c(-.06, .04), labeltype = "custom",
-  custom.labels = topic_labels()
+  xlim = c(-.06, .04), model = stm.p.12
 )
 
 ```
@@ -590,35 +621,14 @@ tidy(race.pred)
 race_levels <- levels(as.factor(meta$race))
 stopifnot(all(c("Black or African American", "Asian", "Latinx", "White") %in% race_levels))
 
-plot(race.pred,
-  covariate = "race", topics = c(1:12), cex = .25,
-  model = stm.p.12, method = "difference",
-  cov.value1 = "Black or African American", cov.value2 = "White",
-  xlab = "More White ... More Black or African American",
-  main = "Effect of Race: K=12",
-  xlim = c(-.05, .05), labeltype = "custom",
-  custom.labels = topic_labels()
-)
-
-plot(race.pred,
-  covariate = "race", topics = c(1:12), cex = .25,
-  model = stm.p.12, method = "difference",
-  cov.value1 = "Asian", cov.value2 = "White",
-  xlab = "More White ... More Asian",
-  main = "Effect of Race: K=12",
-  xlim = c(-.05, .05), labeltype = "custom",
-  custom.labels = topic_labels()
-)
-
-plot(race.pred,
-  covariate = "race", topics = c(1:12), cex = .25,
-  model = stm.p.12, method = "difference",
-  cov.value1 = "Latinx", cov.value2 = "White",
-  xlab = "More White ... More Latinx",
-  main = "Effect of Race: K=12",
-  xlim = c(-.05, .05), labeltype = "custom",
-  custom.labels = topic_labels()
-)
+for (group in c("Black or African American", "Asian", "Latinx")) {
+  plot_difference_effect(race.pred,
+    covariate = "race", value1 = group, value2 = "White",
+    xlab = paste("More White ... More", group),
+    main = "Effect of Race: K=12",
+    xlim = c(-.05, .05), model = stm.p.12
+  )
+}
 ```
 
 
@@ -627,16 +637,14 @@ plot effects of first gen - basic stm model
 ```{r}
 tidy(first.gen.pred)
 
-plot(first.gen.pred,
-  # `Text.cex` (capital T) here was not a graphical parameter, so it was
-  # ignored and R warned six times per plot. Every sibling plot uses `cex`.
-  covariate = "first_gen", topics = c(1:12), cex = .25,
-  model = stm.p.12, method = "difference",
-  cov.value1 = "FALSE", cov.value2 = "TRUE",
+# `Text.cex` (capital T) stood here and is not a graphical parameter, so it was
+# ignored and R warned six times per plot. The shared arguments now live in
+# plot_difference_effect(), where `cex` is spelled once.
+plot_difference_effect(first.gen.pred,
+  covariate = "first_gen", value1 = "FALSE", value2 = "TRUE",
   xlab = "More First Generation ... Less First Generation",
   main = "Effect of First Generation",
-  xlim = c(-.04, .02), labeltype = "custom",
-  custom.labels = topic_labels()
+  xlim = c(-.04, .02), model = stm.p.12
 )
 ```
 
@@ -645,16 +653,7 @@ Topic prevalence as a function of Age - basic stm prevalence model
 Age is a statistically significant covariate for the following topics  1, 3, 4, 5, 7, 8, 9, 10, 12
 
 ```{r}
-plot_age <- function(effect, covariate, topic_num, model) {
-  for (i in topic_num) {
-    plot(effect, covariate,
-      method = "continuous", topics = i, model = model, printlegend = FALSE, # legend True will print the topic number
-      xlab = "Age", main = str_glue("Topic Prevalence as a Function of Age: Topic {i}")
-    )
-  }
-}
-
-plot_age(age.pred, "age", c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), stm.p.12)
+plot_continuous_effect(age.pred, "age", topics = 1:12, model = stm.p.12)
 ```
 
 Plot age & gender interactions - basic stm prevalence model
@@ -666,70 +665,47 @@ interact.signf <- estimateEffect(formula = c(1:12) ~ gender * age, stmobj = stm.
 
 # evaluate statistical significance of interaction
 
-tidy(interact.signf) %>%
-  filter(term != "(Intercept)" & p.value < 0.1)
+significant_effects(interact.signf, alpha = 0.1)
 
 # summary format
 
 gender.age <- summary(interact.signf) # 2,4,6
 
 # plot the significant interactions of age and gender
+#
+# Three copies of the same triplet stood here -- male line, female line added
+# over it, then a hand-placed legend -- differing only in topic number and y
+# limits. The second call of each triplet has to omit `main` and `ylim` and pass
+# `add = TRUE`, an asymmetry that drifts when copied, so it lives in
+# plot_gender_age_interaction() (R/covariate_effects.R) instead.
+#
+# Y limits are per-topic: the curves occupy different ranges and a shared scale
+# would flatten the smaller ones.
 
-c2 <- estimateEffect(formula = c(2) ~ gender * age, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
-c4 <- estimateEffect(formula = c(4) ~ gender * age, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
-c6 <- estimateEffect(formula = c(6) ~ gender * age, stmobj = stm.p.12, metadata = meta, uncertainty = "Global")
-
-
-# topic 2
-
-
-plot(c2,
-  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .1),
-  printlegend = FALSE, main = paste0("Topic 2: ", topic_labels(topics = 2), " (P < 0.10)")
+interaction.topics <- list(
+  list(topic = 2, ylim = c(0, .1)),
+  list(topic = 4, ylim = c(.04, .18)),
+  list(topic = 6, ylim = c(0, .15))
 )
 
-plot(c2,
-  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
-  printlegend = FALSE
-)
+for (spec in interaction.topics) {
+  # The formula is built as text rather than written with `spec$topic` inline.
+  # estimateEffect() evaluates the response term with the global environment as
+  # its enclosure, so `spec` would be looked up there -- where it resolves to
+  # readr::spec, a function, and fails with "object of type 'closure' is not
+  # subsettable". Substituting the number first leaves nothing to look up.
+  topic.effect <- estimateEffect(
+    formula = stats::as.formula(paste0("c(", spec$topic, ") ~ gender * age")),
+    stmobj = stm.p.12, metadata = meta, uncertainty = "Global"
+  )
 
-legend(18, .1, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
-
-
-# topic 4
-
-plot(c4,
-  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(.04, .18),
-  printlegend = FALSE, main = paste0("Topic 4: ", topic_labels(topics = 4), " (P < 0.10)")
-)
-
-plot(c4,
-  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
-  printlegend = FALSE
-)
-
-legend(18, 0.18, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
-
-
-# topic 6
-
-plot(c6,
-  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .15),
-  printlegend = FALSE, main = paste0("Topic 6: ", topic_labels(topics = 6), " (P < 0.10)")
-)
-
-plot(c6,
-  covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
-  moderator = "gender", moderator.value = "F", linecol = "red", add = TRUE,
-  printlegend = FALSE
-)
-
-legend(18, 0.15, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
+  plot_gender_age_interaction(
+    topic.effect,
+    model = interact.signf,
+    topic = spec$topic,
+    ylim = spec$ylim
+  )
+}
 ```
 Create network plot for topics. Assign a cutoff threshold of 0.05
 

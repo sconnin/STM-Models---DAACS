@@ -653,6 +653,30 @@ zero or negative (`-3.2`, `-1.54`, `-1.04`, `-3.08`), where the sign itself may 
 independently reproducible. **This changes all reported variance-explained figures**: the originals
 came from unseeded runs that cannot be recovered.
 
+### S3-6 · `estimateEffect()` is unseeded, and it is stochastic
+`stm_analyses_final.Rmd` — every covariate effect
+
+Found while building `results/RESULTS.md`. `estimateEffect(uncertainty = "Global")` draws posterior
+samples of the topic proportions, and `summary.estimateEffect()` — which `tidy()` calls — simulates
+500 further draws per sample to get standard errors. Neither was seeded, so no covariate result in
+this analysis could be regenerated.
+
+**Measured across two builds of the results document.** One topic's gender F statistic came out at
+150 and at 181; term-level p-values moved by up to 0.016, changing how many terms clear an
+uncorrected 0.05 (8 versus 7 for race, 47 versus 49 for age).
+
+This is the same defect as S3-1 in a different place: a stochastic procedure reported as if it were
+deterministic. It is worse in one respect — the model fits at least produced a saved artifact,
+whereas these estimates are recomputed on every run.
+
+**RESOLVED** — `set.seed(20220527)` before the estimation in both
+`stm_analyses_final.Rmd` and `scripts/build_results.R`, verified: two runs under the seed produce
+bit-identical joint tests and term-level p-values. The joint tests in `R/multiple_comparisons.R`
+pool the posterior draws analytically rather than by simulation, so they are additionally stable
+against the `summary()` layer.
+
+---
+
 ### S3-3 · Frequency thresholds hardcoded as absolute counts
 `stm_models_final.rmd:57`
 
@@ -987,23 +1011,29 @@ test, so it cannot be quietly forgotten.
 
 ## Duplication inventory
 
-Drives the Phase 4 extraction. Ordered by payoff.
+Drove the Phase 4 extraction. Ordered by payoff. Every row is now extracted or
+deliberately left, with the reason.
 
-| Duplicated construct | Occurrences | Location |
-|---|---|---|
-| `randomForest` + `select` + `na.omit` block | **12** | `stm.rforestmodels.final.Rmd:141-211` |
-| `vip()` call | **12** | `stm.rforestmodels.final.Rmd:216-227` |
-| Prevalence formula `~ gender + race + first_gen + s(age) + gender*s(age)` | **15** verbatim | `stm_models_final.rmd` throughout |
-| 12-element `custom.labels` topic vector | **6** verbatim | `stm_analyses_final.Rmd:493, 534, 543, 552, 569, 667` (+ as rename targets `stm.rforestmodels.final.Rmd:263`) |
-| `exemplars()` function definition | **3** near-identical | `essay_examples_final.Rmd:91, 133, 173` |
-| tidy→group→summarise→ggplot prevalence block | **5** | `stm_analyses_final.Rmd:181-259` |
-| `cbind` + `as.numeric(as.character())` diagnostics block | **5** | `stm_analyses_final.Rmd:112-129` |
-| 14-column SRL `select()` | **3** | `stm.rforestmodels.final.Rmd:65-85` |
-| `make.dt()` + `relocate()` block | **5** | `stm.rforestmodels.final.Rmd:114-118` |
-| `left_join` topic/SRL block | **5** | `stm.rforestmodels.final.Rmd:127-131` |
-| `kable()` top-words block | **4** | `stm_analyses_final.Rmd:298-324` |
-| `estimateEffect()` call | **4** | `stm_analyses_final.Rmd:440-446` |
-| Hand-numbered regex globals `pattern1`…`pattern21` | **21** | `preprocess_data.rmd:64-85` |
+| Duplicated construct | Occurrences | Location | Status |
+|---|---|---|---|
+| `randomForest` + `select` + `na.omit` block | **12** | `stm.rforestmodels.final.Rmd:141-211` | `R/rf_topic_importance.R` |
+| `vip()` call | **12** | `stm.rforestmodels.final.Rmd:216-227` | `R/rf_topic_importance.R`, ggplot2 rendering |
+| Prevalence formula `~ gender + race + first_gen + s(age) + gender*s(age)` | **15** verbatim | `stm_models_final.rmd` throughout | `PREVALENCE_FORMULA` in `R/model_formulas.R` |
+| 12-element `custom.labels` topic vector | **6** verbatim | `stm_analyses_final.Rmd:493, 534, 543, 552, 569, 667` (+ as rename targets `stm.rforestmodels.final.Rmd:263`) | `R/topic_labels.R` |
+| `exemplars()` function definition | **3** near-identical | `essay_examples_final.Rmd:91, 133, 173` | `R/exemplars.R` |
+| tidy→group→summarise→ggplot prevalence block | **5** | `stm_analyses_final.Rmd:181-259` | `R/topic_prevalence.R` |
+| `cbind` + `as.numeric(as.character())` diagnostics block | **5** | `stm_analyses_final.Rmd:112-129` | **Left.** Inside the `eval = FALSE` K-sweep chunk, which is a pair with the commented sweep in `stm_models_final.rmd`. Extracting code that cannot run would obscure the record it exists to keep. Revisit if the sweep is ever restored. |
+| 14-column SRL `select()` | **3** | `stm.rforestmodels.final.Rmd:65-85` | `R/srl_features.R` |
+| `make.dt()` + `relocate()` block | **5** | `stm.rforestmodels.final.Rmd:114-118` | **Left.** Four of the five built `t.6/18/24/32`, which were never read; they were deleted with the K = 12 narrowing. One occurrence is not duplication. |
+| `left_join` topic/SRL block | **5** | `stm.rforestmodels.final.Rmd:127-131` | **Left.** Same cause: reduced to the K = 12 join plus the feedback-view join, which differ in what they join. |
+| `kable()` top-words block | **4** | `stm_analyses_final.Rmd:298-324` | `R/topic_word_tables.R` |
+| `estimateEffect()` call | **4** | `stm_analyses_final.Rmd:440-446` | `R/covariate_effects.R` |
+| Hand-numbered regex globals `pattern1`…`pattern21` | **21** | `preprocess_data.rmd:64-85` | `R/cleaning_patterns.R` |
+
+Three further constructs were extracted that this inventory did not list, all in
+`stm_analyses_final.Rmd`: six `plot(..., method = "difference")` calls repeating the same six
+arguments, the per-topic continuous age plots, and three gender-by-age interaction triplets. All
+three are in `R/covariate_effects.R`.
 
 Two notes on the regex set, for whoever does the extraction:
 

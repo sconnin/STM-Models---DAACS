@@ -94,45 +94,72 @@ cat(
   "of the", n_input, "documents entering prepDocuments()\n"
 )
 
-# save prepDocuments results to local directory
+# Save prepDocuments results. This write was commented out, but three notebooks
+# load the file it produces, so the pipeline could not run from a clean
+# checkout without it. `meta` carries essay text and demographics and is
+# IRB-protected; .gitignore excludes *.Rdata so it stays local.
 
-# save(documents, vocab, meta, file ="processed_corpus_final.Rdata")  # rda - saves multiple files
+save(documents, vocab, meta, file = "processed_corpus_final.Rdata")
 ```
 
-Build set of models (K = 6 to 32) optimized via. exclusivity & coherence measures using manyTopics(). Note that this function only accepts prevalence models. 
+## Scope: K = 12 only
+
+The original sweep fitted five families across K = 6/12/18/24/32 — 21 model calls,
+two of which run 10 internal candidates each. **This file now fits K = 12 only.**
+
+K was not selected by exclusivity and coherence. It was settled by professional
+review of the clustering results across the candidate models, and that review is
+complete: K = 12 is final. Re-fitting K = 6/18/24/32 would regenerate inputs to a
+decision already made, at the majority of the compute cost (the large-K fits
+dominate the sweep).
+
+The corrections that prompted this re-fit do not bear on the choice of K. The
+gender fix moves 134 of 8,210 documents (1.6%), the race fix merges level labels
+without changing which essays are present, and the proportion and corpus-size
+fixes are arithmetic applied downstream of the model. None plausibly changes what
+a human reviewing exemplar essays judged to be the most coherent topic count.
+
+**The K-sweep code is retained, commented out, in each block below.** If the
+corpus ever changes enough to warrant revisiting K, restore those lines rather
+than reconstructing them. See CODE_REVIEW.md.
+
+Five distinct K = 12 models are still fitted, one per family — they differ in
+specification, not in K, and `stm_analyses_final.Rmd` compares all five.
+
+Build the optimized prevalence model using manyTopics(). This function accepts
+only a prevalence formula.
 
 ```{r}
-# Perform model selection across separate STM’s that each assume different numbers of topics
+# manyTopics() loops over K internally, so a single K is valid: it runs once and
+# returns the fitted model as out[[1]].
 
 system.time({
-  ## elapsed time 2286.47
-
-  # build models using manyTopics
+  ## elapsed time for the full K = 6..32 sweep was 2286.47s; K = 12 alone is a
+  ## fraction of that.
 
   select.models <- manyTopics(documents, vocab,
-    data = meta, K = c(6, 12, 18, 24, 32),
+    data = meta, K = 12,
     prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
     runs = 10, init.type = "Spectral", seed = 811235359
   )
 })
 
-# separate models
+stm.model.12 <- select.models$out[[1]]
 
-stm.model.6 <- select.models$out[[1]]
-stm.model.12 <- select.models$out[[2]]
-stm.model.18 <- select.models$out[[3]]
-stm.model.24 <- select.models$out[[4]]
-stm.model.32 <- select.models$out[[5]]
+# Retained for a future K sweep:
+#
+# select.models <- manyTopics(documents, vocab,
+#   data = meta, K = c(6, 12, 18, 24, 32),
+#   prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
+#   runs = 10, init.type = "Spectral", seed = 811235359
+# )
+# stm.model.6  <- select.models$out[[1]]
+# stm.model.12 <- select.models$out[[2]]
+# stm.model.18 <- select.models$out[[3]]
+# stm.model.24 <- select.models$out[[4]]
+# stm.model.32 <- select.models$out[[5]]
 
-# save optimized models to local directory
-
-save(stm.model.6,
-  stm.model.12,
-  stm.model.18,
-  stm.model.24,
-  stm.model.32,
-  file = "optimized.prevalence.models.6_32.Rda"
-)
+save(stm.model.12, file = "optimized.prevalence.model.k12.Rda")
 ```
 Due to the fact that manyTopics only enables a prevalence formula, use the stm() method to model both prevalence and content in a single declaration. The method is applied here to models with K = 6 to 32. Similar to manyTopics, an optimized model for each K based on exclusivity and coherence.
 
@@ -141,53 +168,28 @@ In this latter respect, the use of manyTopics is redundant and is included here 
 ```{r}
 # fit stm models with content + prevalence formulas
 
-content_prev.model.k6 <- selectModel(documents, vocab,
-  data = meta, K = 6,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, runs = 10, seed = 845815921
-)
-
 content_prev.model.k12 <- selectModel(documents, vocab,
   data = meta, K = 12,
   prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
   content = ~gender, max.em.its = 75, runs = 10, seed = 845815922
 )
 
-content_prev.model.k18 <- selectModel(documents, vocab,
-  data = meta, K = 18,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, runs = 10, seed = 845815923
-)
+# Retained for a future K sweep (seeds as originally assigned):
+#
+# content_prev.model.k6 <- selectModel(documents, vocab,
+#   data = meta, K = 6, ..., seed = 845815921)
+# content_prev.model.k18 <- selectModel(documents, vocab,
+#   data = meta, K = 18, ..., seed = 845815923)
+# content_prev.model.k24 <- selectModel(documents, vocab,
+#   data = meta, K = 24, ..., seed = 84581524)
+# content_prev.model.k32 <- selectModel(documents, vocab,
+#   data = meta, K = 32, ..., seed = 841158925)
 
-content_prev.model.k24 <- selectModel(documents, vocab,
-  data = meta, K = 24,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, runs = 10, seed = 84581524
-)
-
-content_prev.model.k32 <- selectModel(documents, vocab,
-  data = meta, K = 32,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, runs = 10, seed = 841158925
-)
-
-# save content-prevalence (selected) models to local directory
-
-save(content_prev.model.k6,
-  content_prev.model.k12,
-  content_prev.model.k18,
-  content_prev.model.k24,
-  content_prev.model.k32,
-  file = "optimized.prevalence.content.models.6_32.Rda"
-)
+save(content_prev.model.k12, file = "optimized.prevalence.content.model.k12.Rda")
 
 # print quick diagnostics
 
-# plotModels(content_prev.model.k6)
 # plotModels(content_prev.model.k12)
-# plotModels(content_prev.model.k18)
-# plotModels(content_prev.model.k24)
-# plotModels(content_prev.model.k32)
 ```
 
 Build prevalence & content formula models without optimization: basic stm() method
@@ -195,107 +197,65 @@ Build prevalence & content formula models without optimization: basic stm() meth
 ```{r}
 # fit stm models for prevalence & content without optimization
 
-stm.pc.6 <- stm(documents, vocab,
-  data = meta, K = 6,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, seed = 784653
-)
-
 stm.pc.12 <- stm(documents, vocab,
   data = meta, K = 12,
   prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
   content = ~gender, max.em.its = 75, seed = 784654
 )
 
-stm.pc.18 <- stm(documents, vocab,
-  data = meta, K = 18,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, seed = 784655
-)
+# Retained for a future K sweep (seeds as originally assigned):
+#
+# stm.pc.6  <- stm(documents, vocab, data = meta, K = 6,  ..., seed = 784653)
+# stm.pc.18 <- stm(documents, vocab, data = meta, K = 18, ..., seed = 784655)
+# stm.pc.24 <- stm(documents, vocab, data = meta, K = 24, ..., seed = 784656)
+# stm.pc.32 <- stm(documents, vocab, data = meta, K = 32, ..., seed = 784657)
 
-stm.pc.24 <- stm(documents, vocab,
-  data = meta, K = 24,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, seed = 784656
-)
-
-stm.pc.32 <- stm(documents, vocab,
-  data = meta, K = 32,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, seed = 784657
-)
-
-# save stm content-prevalence models to local directory
-
-save(stm.pc.6,
-  stm.pc.12,
-  stm.pc.18,
-  stm.pc.24,
-  stm.pc.32,
-  file = "stm.prevalence.content.models.6_32.Rda"
-)
+save(stm.pc.12, file = "stm.prevalence.content.model.k12.Rda")
 ```
 Build prevalence formula model without optimization: basic stm() method
 
-```{r}
-stm.p.6 <- stm(documents, vocab,
-  data = meta, K = 6,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age), init.type = "Spectral", max.em.its = 75
-)
+**These two families previously passed no `seed=`** — the only families in this
+file that did not (`CODE_REVIEW.md` S3-1). Spectral initialization and EM are not
+deterministic without one, so the published `stm.p.12` could not be reproduced,
+and `stm.p.12` is the model that drives every `estimateEffect()` result and the
+topic-correlation network in `stm_analyses_final.Rmd`.
 
+Seeds are added here. Because the previous run was unseeded, its exact fit is
+unrecoverable regardless — so adding them now costs nothing and makes this run,
+the one carrying every correction, reproducible.
+
+```{r}
 stm.p.12 <- stm(documents, vocab,
   data = meta, K = 12,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age), init.type = "Spectral", max.em.its = 75
+  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
+  init.type = "Spectral", max.em.its = 75, seed = 784658
 )
 
-stm.p.18 <- stm(documents, vocab,
-  data = meta, K = 18,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age), init.type = "Spectral", max.em.its = 75
-)
+# Retained for a future K sweep:
+#
+# stm.p.6  <- stm(documents, vocab, data = meta, K = 6,  ..., seed = 784659)
+# stm.p.18 <- stm(documents, vocab, data = meta, K = 18, ..., seed = 784660)
+# stm.p.24 <- stm(documents, vocab, data = meta, K = 24, ..., seed = 784661)
+# stm.p.32 <- stm(documents, vocab, data = meta, K = 32, ..., seed = 784662)
 
-stm.p.24 <- stm(documents, vocab,
-  data = meta, K = 24,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age), init.type = "Spectral", max.em.its = 75
-)
-
-stm.p.32 <- stm(documents, vocab,
-  data = meta, K = 32,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age), init.type = "Spectral", max.em.its = 75
-)
-
-
-save(stm.p.6, stm.p.12, stm.p.18, stm.p.24, stm.p.32, file = "stm.prevalence.models.6_32.Rda")
+save(stm.p.12, file = "stm.prevalence.model.k12.Rda")
 ```
 
-Build content formula without optimization:basic stm() method. Use same seed.
+Build content formula without optimization: basic stm() method.
 
 ```{r}
-stm.c.6 <- stm(documents, vocab,
-  data = meta, K = 6,
-  content = ~gender, init.type = "Spectral", max.em.its = 75
-)
-
 stm.c.12 <- stm(documents, vocab,
   data = meta, K = 12,
-  content = ~gender, init.type = "Spectral", max.em.its = 75
+  content = ~gender, init.type = "Spectral", max.em.its = 75, seed = 784663
 )
 
-stm.c.18 <- stm(documents, vocab,
-  data = meta, K = 18,
-  content = ~gender, init.type = "Spectral", max.em.its = 75
-)
+# Retained for a future K sweep:
+#
+# stm.c.6  <- stm(documents, vocab, data = meta, K = 6,  ..., seed = 784664)
+# stm.c.18 <- stm(documents, vocab, data = meta, K = 18, ..., seed = 784665)
+# stm.c.24 <- stm(documents, vocab, data = meta, K = 24, ..., seed = 784666)
+# stm.c.32 <- stm(documents, vocab, data = meta, K = 32, ..., seed = 784667)
 
-stm.c.24 <- stm(documents, vocab,
-  data = meta, K = 24,
-  content = ~gender, init.type = "Spectral", max.em.its = 75
-)
-
-stm.c.32 <- stm(documents, vocab,
-  data = meta, K = 32,
-  content = ~gender, init.type = "Spectral", max.em.its = 75
-)
-
-
-save(stm.c.6, stm.c.12, stm.c.18, stm.c.24, stm.c.32, file = "stm.content.models.6_32.Rda")
+save(stm.c.12, file = "stm.content.model.k12.Rda")
 ```
 

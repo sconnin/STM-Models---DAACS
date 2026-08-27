@@ -527,6 +527,13 @@ cannot now be reproduced exactly.
 assigned labels before reusing them. Treat label re-validation as part of the fix, not an optional
 follow-up.
 
+**RESOLVED.** `stm.p.12` (seed 784658) and `stm.c.12` (seed 784663) now pass explicit seeds, with
+seeds reserved for the other K values in the retained sweep code. Because the previous run was
+unseeded, its exact fit was unrecoverable regardless — so adding seeds cost nothing and makes the
+re-fit that carries every correction reproducible.
+
+Label re-validation remains open and is the user's call: see S5-1.
+
 ### S3-2 · No `set.seed()` before any random forest
 `stm.rforestmodels.final.Rmd:141-211, 271`
 
@@ -884,6 +891,56 @@ Two notes on the regex set, for whoever does the extraction:
   and `pattern7`. Since `pattern3` is applied first (L122), the four that follow are partly redundant
   — but only partly, because `pattern3` matches the whole block as a unit and the others match
   fragments that may appear alone. **The order is load-bearing; preserve it and document why.**
+
+---
+
+## Scope decision — the re-fit covers K = 12 only
+
+**Decided by the project owner; recorded here because it changes what
+`stm_models_final.rmd` produces and what three downstream notebooks can reference.**
+
+The original file fitted five families across K = 6/12/18/24/32 — 21 model calls, two of which
+(`manyTopics`, `selectModel`) run 10 internal candidates each. The re-fit that carries the S1
+corrections fits **K = 12 only**, still across all five families.
+
+### Why this is sound
+
+**K was not chosen by exclusivity and coherence.** It was settled by professional review of the
+clustering results across the candidate models. That review is complete and K = 12 is final, so
+re-fitting the other four K values would regenerate inputs to a decision already made — at the
+majority of the compute cost, since the large-K fits dominate the sweep.
+
+**The corrections do not bear on the choice of K.** The gender fix moves 134 of 8,210 documents
+(1.6%); the race fix merges level labels without changing which essays are present; the S1-4 and
+S1-5 fixes are arithmetic applied downstream of the model. None plausibly changes what a human
+reviewing exemplar essays judged to be the most coherent topic count. *This is a judgement, not a
+verified claim* — it is the project owner's call, and they have made it.
+
+**Every published analysis already used K = 12 exclusively.** Verified by reference check, not
+assumption: every plot, effect estimate, and label in `stm_analyses_final.Rmd` touches K = 12
+objects only. The sole exception was the exclusivity-vs-coherence comparison, which is precisely the
+method that did not drive the decision.
+
+### What changed
+
+| File | Change |
+|---|---|
+| `stm_models_final.rmd` | Fits K = 12 per family. K-sweep code **retained, commented**, with seeds reserved. Corpus `save()` re-enabled. |
+| `stm_analyses_final.Rmd` | Exclusivity/coherence chunk marked `eval = FALSE` — it is a pair with the sweep; restore both together. |
+| `essay_examples_final.Rmd` | Exemplars and top essays now loop over the five K = 12 specifications instead of K = 6/32 and five `stm.pc.*`. |
+| `stm.rforestmodels.final.Rmd` | Dead `t.6/18/24/32` and `srl.topics.6/18/24/32` removed — assigned but never read, dead before this decision. |
+| `scripts/capture_baseline.R` | Baseline covers the five K = 12 objects; `selectModel` output summarised via `$runout[[1]]`. |
+
+Artifact filenames were renamed from `*.6_32.Rda` to `*.k12.Rda` so the names describe the contents.
+Every S2 finding in this document was a name that did not match what it referenced; keeping a file
+called `6_32` holding only K = 12 would have added another.
+
+### Open item
+
+**S5-1 · Topic labels need re-validation against the new fit.** `TOPIC_LABELS_K12` was assigned by
+hand against the old, uncorrected model. The corrected corpus may shift what the twelve topics
+contain. Compare `labelTopics()` output against the assigned labels before reusing them in any
+write-up — a judgement call for the project owner, not a mechanical check.
 
 ---
 

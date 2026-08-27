@@ -59,16 +59,14 @@ First, load stm prevalence models for analysis
 ```{r}
 # load basic stm prevalence model
 
-load("stm.prevalence.models.6_32.Rda")
+load("stm.prevalence.model.k12.Rda")
 
-# disaggregate models
-
-stm.p.6
 stm.p.12
-stm.p.18
-stm.p.24
-stm.p.32
 ```
+
+The bare `stm.p.6` … `stm.p.32` statements that stood here printed each model and
+discarded the result. Only K = 12 is fitted now, and only `stm.p.12` is used
+below.
 load raw daacs data and subset srl variables
 
 ```{r}
@@ -133,35 +131,25 @@ Build topic proportion tables
 table.meta <- meta %>%
   select(doc_id, institution)
 
-# create topic prevalence tables that includes identifiers
-t.6 <- make.dt(stm.p.6, meta = table.meta) %>%
-  relocate(c(doc_id, institution), .after = docnum) %>%
-  select(!docnum)
+# create topic prevalence table that includes identifiers
 t.12 <- make.dt(stm.p.12, meta = table.meta) %>%
   relocate(c(doc_id, institution), .after = docnum) %>%
   select(!docnum)
-t.18 <- make.dt(stm.p.18, meta = table.meta) %>%
-  relocate(c(doc_id, institution), .after = docnum) %>%
-  select(!docnum)
-t.24 <- make.dt(stm.p.24, meta = table.meta) %>%
-  relocate(c(doc_id, institution), .after = docnum) %>%
-  select(!docnum)
-t.32 <- make.dt(stm.p.32, meta = table.meta) %>%
-  relocate(c(doc_id, institution), .after = docnum) %>%
-  select(!docnum)
 ```
+
+`t.6`, `t.18`, `t.24` and `t.32` were built here and **never read** — only `t.12`
+feeds the joins below. They were dead before K = 12 became the only fitted model;
+removing them changes no result.
 
 Combine topic proportion and srl variables
 
 ```{r}
 # combine topic data and srl covariate data into single dataframe
 
-srl.topics.6 <- left_join(srl.features, t.6, by = c("doc_id", "institution"))
 srl.topics.12 <- left_join(srl.features, t.12, by = c("doc_id", "institution"))
-srl.topics.18 <- left_join(srl.features, t.18, by = c("doc_id", "institution"))
-srl.topics.24 <- left_join(srl.features, t.24, by = c("doc_id", "institution"))
-srl.topics.32 <- left_join(srl.features, t.32, by = c("doc_id", "institution"))
 ```
+
+Likewise `srl.topics.6/18/24/32`: assigned, never used.
 
 Build Random Forest models for the K=12 topics, assessing how much variance in
 each topic's document prevalence is explained by the SRL component scores.

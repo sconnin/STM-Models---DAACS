@@ -56,16 +56,19 @@ Load processed corpus and optimized stm models. The latter include models for pr
 
 processed <- load("processed_corpus_final.Rdata")
 
-# load models
+# load models -- all five specifications at K = 12
 
-load("optimized.prevalence.models.6_32.Rda") # e.g., optimized prevalence: stm.model.12
-
-load("optimized.prevalence.content.models.6_32.Rda") # e.g.,     # optimized prevalence & content: content_prev.model.k12
-
-# load prevalence & content models (stm())
-
-basic.stm <- load("stm.prevalence.content.models.6_32.Rda")
+load("optimized.prevalence.model.k12.Rda") # stm.model.12          (manyTopics)
+load("optimized.prevalence.content.model.k12.Rda") # content_prev.model.k12 (selectModel)
+load("stm.prevalence.content.model.k12.Rda") # stm.pc.12             (stm, prev + content)
+load("stm.prevalence.model.k12.Rda") # stm.p.12              (stm, prevalence)
+load("stm.content.model.k12.Rda") # stm.c.12              (stm, content)
 ```
+
+**K = 12 only.** This notebook previously produced exemplars at K = 6 and K = 32 and top-essay files
+across all five values of K. That material was the *input* to the model-review process that settled
+on K = 12; that review is complete, so it is no longer regenerated. The five models below differ in
+specification, not in topic count, which is the comparison that remains useful. See `CODE_REVIEW.md`.
 
 Filter raw DAACS essays using the processed meta file doc_id & institution column identifiers. This will exclude essays removed as part of the filtering process.
 
@@ -110,69 +113,41 @@ each distinct essay -- always 1, since essays are unique -- and emitted
 `"essay text"\t1` per line. It now writes the essay text plainly, which is
 evidently what was intended. See `CODE_REVIEW.md`.
 
-```{r warning=FALSE}
-# Optimized prevalence model (manyTopics)
-write_topic_exemplars(
-  stm.model.12,
-  model_label = "stm.model.12",
-  topics = 1:12,
-  texts = original$text,
-  collection = "Essay_Passages",
-  n = 5,
-  text_cex = 1
-)
-```
-
-Repeat for prevalence & content, to see whether the exemplars differ. Note there
-are differences, which may owe to different initialization starting points.
+Exemplar passages for each of the five K = 12 specifications. Differences
+between them reflect the model formula and initialization, not the topic count.
 
 ```{r warning=FALSE}
-write_topic_exemplars(
-  content_prev.model.k6$runout[[1]],
-  model_label = "content_prev.model.k6",
-  topics = 1:6,
-  texts = original$text,
-  collection = "Passages-Prev&Content",
-  n = 4,
-  text_cex = 0.7
+k12_models <- list(
+  "stm.model.12" = stm.model.12, # manyTopics, prevalence
+  "content_prev.model.k12" = content_prev.model.k12$runout[[1]], # selectModel, prev + content
+  "stm.pc.12" = stm.pc.12, # stm, prevalence + content
+  "stm.p.12" = stm.p.12, # stm, prevalence
+  "stm.c.12" = stm.c.12 # stm, content
 )
+
+for (label in names(k12_models)) {
+  write_topic_exemplars(
+    k12_models[[label]],
+    model_label = label,
+    topics = 1:12,
+    texts = original$text,
+    collection = "Essay_Passages",
+    n = 5,
+    text_cex = 1
+  )
+}
 ```
 
-Finally, extract passages from the basic stm models. These files are used for
-downstream analyses and writeup.
-
-```{r warning=FALSE}
-write_topic_exemplars(
-  stm.pc.32,
-  model_label = "stm.pc.32",
-  topics = 1:32,
-  texts = original$text,
-  collection = "Passages-basic.stm",
-  n = 4,
-  text_cex = 0.7
-)
-```
-
-Write the top 5 representative essays (raw text) per model and topic to file.
-These come from the basic stm models, which include prevalence and content
-formulas -- see the results discussed in stm_analyses_final.
+Write the top 5 representative essays (raw text) per model and topic to file,
+for the same five K = 12 specifications.
 
 ```{r warning=FALSE}
 identifiers <- meta %>% select(doc_id, institution)
 
-topic_tables <- list(
-  "stm.pc.6" = make.dt(stm.pc.6, meta = identifiers),
-  "stm.pc.12" = make.dt(stm.pc.12, meta = identifiers),
-  "stm.pc.18" = make.dt(stm.pc.18, meta = identifiers),
-  "stm.pc.24" = make.dt(stm.pc.24, meta = identifiers),
-  "stm.pc.32" = make.dt(stm.pc.32, meta = identifiers)
-)
-
-for (label in names(topic_tables)) {
-  k <- as.integer(sub("stm[.]pc[.]", "", label))
+for (label in names(k12_models)) {
   write_top_essays(
-    topic_table = topic_tables[[label]],
-    topics = seq_len(k),
+    topic_table = make.dt(k12_models[[label]], meta = identifiers),
+    topics = 1:12,
     raw_data = original,
     model_label = label,
     collection = "Top Essays",

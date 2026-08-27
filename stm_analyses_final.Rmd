@@ -58,16 +58,22 @@ Load corpus, kresult, and models -- from preprocess_data_final and stm topic mod
 Models loaded in this file. Each file is written by stm_models_final.Rmd; the object names below are
 what `load()` restores into the global environment, so they are the names to reference downstream.
 
-| File | Objects | Fitted by | Formula |
+| File | Object | Fitted by | Formula |
 |---|---|---|---|
-| optimized.prevalence.models.6_32.Rda | `stm.model.6` … `stm.model.32` | `manyTopics()` | prevalence |
-| optimized.prevalence.content.models.6_32.Rda | `content_prev.model.k6` … `.k32` | `selectModel()` | prevalence + content |
-| stm.prevalence.content.models.6_32.Rda | `stm.pc.6` … `stm.pc.32` | `stm()` | prevalence + content |
-| stm.prevalence.models.6_32.Rda | `stm.p.6` … `stm.p.32` | `stm()` | prevalence |
-| stm.content.models.6_32.Rda | `stm.c.6` … `stm.c.32` | `stm()` | content |
+| optimized.prevalence.model.k12.Rda | `stm.model.12` | `manyTopics()` | prevalence |
+| optimized.prevalence.content.model.k12.Rda | `content_prev.model.k12` | `selectModel()` | prevalence + content |
+| stm.prevalence.content.model.k12.Rda | `stm.pc.12` | `stm()` | prevalence + content |
+| stm.prevalence.model.k12.Rda | `stm.p.12` | `stm()` | prevalence |
+| stm.content.model.k12.Rda | `stm.c.12` | `stm()` | content |
 
 Note: "optimized" refers to automatic selection based on high-likelihood values. The `selectModel()`
 families return a list, so those objects are indexed as `$runout[[n]]` rather than used directly.
+
+**K = 12 only.** These five models differ in specification, not in topic count. K was settled by
+professional review of the clustering results across candidate models rather than by exclusivity and
+coherence, and that review is complete — so `stm_models_final.rmd` no longer re-fits K = 6/18/24/32.
+Every analysis in this file already referenced K = 12 exclusively; the one exception was the
+exclusivity-vs-coherence comparison below, which is now inert. See `CODE_REVIEW.md`.
 
 ```{r}
 # load processed corpus - documents, vocab, meta
@@ -76,23 +82,23 @@ processed <- load("processed_corpus_final.Rdata")
 
 # load optimized prevalence models
 
-prev.models <- load("optimized.prevalence.models.6_32.Rda")
+prev.models <- load("optimized.prevalence.model.k12.Rda")
 
 # load optimized prevalence & content models
 
-prev.content.models <- load("optimized.prevalence.content.models.6_32.Rda")
+prev.content.models <- load("optimized.prevalence.content.model.k12.Rda")
 
 # load basic stm prevalence & content models
 
-prev.content.stm <- load("stm.prevalence.content.models.6_32.Rda")
+prev.content.stm <- load("stm.prevalence.content.model.k12.Rda")
 
 # load basic stm prevalence model
 
-prev.stm <- load("stm.prevalence.models.6_32.Rda")
+prev.stm <- load("stm.prevalence.model.k12.Rda")
 
 # load basic stm content model
 
-content.stm <- load("stm.content.models.6_32.Rda")
+content.stm <- load("stm.content.model.k12.Rda")
 ```
 
 Load raw essays and bind to filtered identifiers (doc_id, institution) - original text less any essays filtered out during preprocessing. 
@@ -116,13 +122,21 @@ preclean <- read_csv("preclean_text.csv")
 original <- left_join(filter_id, preclean, by = "doc_id")
 ```
 
-Plot coherence vs exclusivity for optimized models with prevalence formula only. This provides and example for model selection.
+## Exclusivity vs. coherence across K — not run
 
+This was the one section of this file that required the full K sweep. It is retained as a record of
+the diagnostic that was computed, but **it is not part of how K was chosen**: the selection was made
+by professional review of the clustering results across candidate models, not by these two measures.
+Since `stm_models_final.rmd` now fits K = 12 only, `stm.model.6/18/24/32` do not exist and this code
+would error.
 
-These plots cannot be graphed when content formula is included.
+To restore it, un-comment the K sweep in `stm_models_final.rmd` and this chunk together — they are a
+pair. The chunk is marked `eval = FALSE` so the notebook knits without it.
 
-```{r}
-# build dataframes with exlusivity and coherence measures for each optimized model in the
+These plots cannot be graphed when a content formula is included.
+
+```{r eval = FALSE}
+# build dataframes with exclusivity and coherence measures for each optimized model
 
 CE6 <- as.data.frame(cbind(c(1:6), exclusivity(stm.model.6), semanticCoherence(model = stm.model.6, documents), "Mod6"))
 CE12 <- as.data.frame(cbind(c(1:12), exclusivity(stm.model.12), semanticCoherence(model = stm.model.12, documents), "Mod12"))

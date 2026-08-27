@@ -67,11 +67,11 @@ say("covariates summarised: ", paste(covariates, collapse = ", "))
 # --- models ----------------------------------------------------------------
 
 model_files <- c(
-  prevalence = "stm.prevalence.models.6_32.Rda",
-  prevalence_content = "stm.prevalence.content.models.6_32.Rda",
-  optimized_prevalence = "optimized.prevalence.models.6_32.Rda",
-  optimized_prev_content = "optimized.prevalence.content.models.6_32.Rda",
-  content = "stm.content.models.6_32.Rda"
+  prevalence = "stm.prevalence.model.k12.Rda",
+  prevalence_content = "stm.prevalence.content.model.k12.Rda",
+  optimized_prevalence = "optimized.prevalence.model.k12.Rda",
+  optimized_prev_content = "optimized.prevalence.content.model.k12.Rda",
+  content = "stm.content.model.k12.Rda"
 )
 
 present <- model_files[file.exists(model_files)]
@@ -114,12 +114,11 @@ model_diagnostics <- function(model_name) {
   d
 }
 
-wanted <- c(
-  paste0("stm.p.", c(6, 12, 18, 24, 32)),
-  paste0("stm.pc.", c(6, 12, 18, 24, 32)),
-  paste0("stm.model.", c(6, 12, 18, 24, 32)),
-  paste0("stm.c.", c(6, 12, 18, 24, 32))
-)
+# The four plain-model families at K = 12. K was settled by review of the
+# clustering results rather than by exclusivity and coherence, so 6/18/24/32 are
+# no longer fitted; model_diagnostics() returns NULL for anything absent, so
+# leaving them listed would be harmless but misleading.
+wanted <- c("stm.p.12", "stm.pc.12", "stm.model.12", "stm.c.12")
 
 baseline$models <- list()
 for (nm in wanted) {
@@ -130,6 +129,21 @@ for (nm in wanted) {
         ", mean theta=", format(mean(d$topic_proportions), digits = 6))
   }
 }
+
+# selectModel() returns a list of candidate runs rather than a fitted model, so
+# it cannot be passed to model_diagnostics() directly. Summarise the selected
+# run, which is the one stm_analyses_final.Rmd uses.
+if (exists("content_prev.model.k12")) {
+  selected_run <- content_prev.model.k12$runout[[1]]
+  assign("selected_run", selected_run)
+  d <- model_diagnostics("selected_run")
+  if (!is.null(d)) {
+    baseline$models[["content_prev.model.k12$runout[[1]]"]] <- d
+    say("  content_prev.model.k12$runout[[1]]: K=", d$k,
+        ", mean theta=", format(mean(d$topic_proportions), digits = 6))
+  }
+}
+
 say("models summarised: ", length(baseline$models))
 
 # --- covariate effects -----------------------------------------------------

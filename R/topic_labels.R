@@ -19,10 +19,19 @@
 #' Applying them to a model with a different K is a labelling error, not a
 #' cosmetic one, which is why `topic_labels()` refuses rather than recycling.
 
-# Order is significant: element i labels TopicI. Preserved exactly as written in
-# the notebooks, including the "Appying" typo in element 11 -- correcting it here
-# would change figure output, so it is left for a deliberate decision rather than
-# folded into a refactor. See CODE_REVIEW.md.
+# Order is significant: element i labels TopicI.
+#
+# THESE LABELS ARE TENTATIVE. They were assigned against an earlier fit and
+# re-checked against the corrected one. Eleven hold; TOPIC 1 IS A KNOWN WEAK FIT
+# -- across all four labelTopics() metrics it reads as self-monitoring and study
+# strategy (self-monitor, self-evalu, brainstorm, assign, schoolwork) rather than
+# "Areas for Improvement". It is retained pending review of its exemplar essays.
+# See CODE_REVIEW.md S5-1 and README.md.
+#
+# Element 11 previously read "Appying" -- a typo carried verbatim from the
+# notebooks. Corrected here, which also resolves the disagreement with the plot
+# title at stm_analyses_final.Rmd (CODE_REVIEW.md X-1). Figure text changes
+# accordingly.
 TOPIC_LABELS_K12 <- c(
   "Areas for Improvement",
   "Developing Writing Skills",
@@ -34,7 +43,7 @@ TOPIC_LABELS_K12 <- c(
   "Time Management",
   "Getting it Right Getting it Done",
   "Adjusting Ones Mindset",
-  "Appying and Retaining Subject Matter",
+  "Applying and Retaining Subject Matter",
   "Managing Distractions"
 )
 

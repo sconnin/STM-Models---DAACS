@@ -437,6 +437,43 @@ zero. Decide this alongside the re-fit; the practical stakes are one essay, not 
 
 ---
 
+### S1-10 · Essay join on `doc_id` alone matches across institutions
+`stm_analyses_final.Rmd`
+
+```r
+original <- left_join(filter_id, preclean, by = "doc_id")
+```
+
+**`doc_id` is unique only within an institution.** The three sources reuse the same numeric ids, so
+joining on `doc_id` alone matches a student at one institution to essays at another.
+
+Measured on the real data:
+
+| | rows |
+|---|---:|
+| corpus (`meta`) | 8,210 |
+| join by `doc_id` only, as written | **10,224** |
+| join by `doc_id` + `institution` | 8,210 |
+| spurious rows | **2,014** |
+
+**All 2,014 extra rows pair a student with another institution's essay text.** The result is also
+row-misaligned with the model, which matters because `findThoughts()` indexes `texts` *positionally*
+against document number — so exemplar lookups would return unrelated essays, not merely extra ones.
+
+**No published result is affected.** `original` is assigned in this notebook and never read — verified
+by reference check. But the comment above it advertises the object "for use in topic exemplar review",
+which is precisely the use that would have been wrong, and `essay_examples_final.Rmd` already joins on
+both keys. The inconsistency between the two files is what makes this a trap rather than dead weight.
+
+**RESOLVED** — joins on both keys, with `stopifnot(nrow(original) == nrow(meta))` so any future
+regression fails loudly rather than silently inflating. Note that the per-institution joins in
+`preprocess_data.rmd` are correct as written: they join one institution's covariates to that same
+institution's essays, where `doc_id` *is* unique.
+
+Surfaced by a dplyr many-to-many warning when the notebook was first run — not by inspection.
+
+---
+
 ## S2 — Broken references
 
 These prevent execution. Fixing them changes no working behavior.
@@ -505,6 +542,58 @@ has it, so it looks like a stray keystroke rather than intent.
 
 **Recommendation** — delete the extra comma. Mechanical and safe, but listed under S2 rather than S4
 because it is a defect rather than a style choice.
+
+---
+
+### S2-7 · `topics` passed positionally into `n` in two `plot.STM()` calls
+`stm_analyses_final.Rmd` — the two `"hist"` plots
+
+```r
+plot(stm.model.12, "hist", c(1:12), main = "Frequency Distribution of Topics: ...")
+```
+
+`plot.STM()`'s signature is `(x, type, n, topics, ...)`. The **third positional argument is `n`**, not
+`topics` — so `c(1:12)` was passed as `n`, and `labelTopics()` then evaluated `if (n < 1)` against a
+length-12 vector.
+
+Under R < 4.2 that was a warning and R silently used the first element; **from R 4.2 it is an error**,
+which is how this surfaced. The plots were therefore never doing what they appeared to do even when
+they "worked" — they used `n = 1`.
+
+**RESOLVED** — `topics` is now named in both calls. Found by running the notebook, not by inspection:
+every reference resolved, so no static check would have caught it.
+
+---
+
+### S2-8 · A `"perspectives"` plot that could not have produced its own title
+`stm_analyses_final.Rmd`
+
+```r
+plot(stm.p.12, "perspectives", topics = (1:12), n = 12, text.cex = 1,
+     main = "Gender-Based Vocabulary: Test Anxiety")
+```
+
+Wrong three independent ways:
+
+- **`stm.p.12` has no content covariate.** Verified against the fitted object: one beta group, no
+  per-gender vocabulary. A perspectives plot on it cannot show gender-based word use at all.
+- **`topics = 1:12` is invalid for this plot type**, which contrasts one or two topics. This is what
+  made it error rather than merely mislead.
+- **The title names one topic** ("Test Anxiety", topic 3) while twelve were passed.
+
+**RESOLVED — removed.** The block immediately below does this correctly, using `stm.c.12` (the content
+model), one topic per plot, and already includes topic 3. Nothing was lost.
+
+---
+
+### S2-9 · `Text.cex` is not a graphical parameter
+`stm_analyses_final.Rmd` — the first-generation effect plot
+
+`Text.cex = .25` (capital T) is not a parameter of anything in the call chain. It was passed through
+`...` into base graphics, ignored, and warned about six times per plot. Every sibling
+`estimateEffect` plot uses `cex = .25`.
+
+**RESOLVED** — corrected to `cex`. The notebook now runs warning-free.
 
 ---
 

@@ -44,14 +44,22 @@ library(igraph) # network graph
 library(huge) # network graph
 library(tidytext)
 library(patchwork)
-library(kableExtra)
 
 # Shared helpers: TOPIC_LABELS_K12, topic_labels()
 source("R/topic_labels.R")
 ```
 
-`httr` was dropped from this block -- it was declared here and in two other
-notebooks but never called (`CODE_REVIEW.md` S4).
+Two libraries were dropped from this block. `httr` was declared here and in two
+other notebooks but never called. `kableExtra` was declared but never used
+either: the four tables below call `kable()`, which comes from **knitr**, not
+from `kableExtra` -- no `kable_styling()`, `column_spec()` or other extension
+function appears anywhere in this file.
+
+That distinction matters practically, not just tidily. `kableExtra` depends on
+`svglite` -> `systemfonts`/`textshaping`, which need the harfbuzz and fribidi
+system headers; without them `install.packages("kableExtra")` fails and this
+notebook cannot run at all. Dropping an unused dependency removed that blocker.
+See `CODE_REVIEW.md` S4.
 
 Load corpus, kresult, and models -- from preprocess_data_final and stm topic models
 
@@ -109,17 +117,31 @@ Load raw essays and bind to filtered identifiers (doc_id, institution) - origina
 filtered <- meta %>%
   select(doc_id, institution, text)
 
-filter_id <- filtered %>%
-  select(doc_id)
-
 # load raw data
 
-preclean <- read_csv("preclean_text.csv")
+preclean <- read_csv("preclean_text.csv", show_col_types = FALSE)
 
+# Join on doc_id AND institution. doc_id is unique only WITHIN an institution;
+# the three sources reuse the same numeric ids, so joining on doc_id alone
+# matches essays across institutions (CODE_REVIEW.md S1-10).
+#
+# As written -- `left_join(filter_id, preclean, by = "doc_id")` -- this produced
+# 10,224 rows from an 8,210-document corpus, and all 2,014 extra rows paired a
+# student with another institution's essay text. It was also row-misaligned with
+# the model, which matters because findThoughts() indexes texts positionally.
+#
+# The object was never actually read in this file, so no published result is
+# affected -- but the comment above advertises it "for use in topic exemplar
+# review", which is exactly the use that would have been wrong.
+# essay_examples_final.Rmd already joins on both keys.
 
-# remove obs in original data that are not included in prepDocuments output -- for use in topic exemplar review
+original <- inner_join(
+  filtered %>% select(doc_id, institution),
+  preclean,
+  by = c("doc_id", "institution")
+)
 
-original <- left_join(filter_id, preclean, by = "doc_id")
+stopifnot(nrow(original) == nrow(meta))
 ```
 
 ## Exclusivity vs. coherence across K — not run
@@ -329,37 +351,25 @@ sageLabels(stm.p.12)
 
 # create tables for top word categories == stm prevalence model
 
-lab12.prob.stm <- l12.d[1] %>%
-  as.data.frame() %>% # will collect top 10 lift terms for each topic
-  rownames_to_column(var = "topic") %>%
-  unite(collapse, !1, remove = FALSE, sep = ", ") %>%
-  rename(top_words = collapse) %>%
-  select(topic, top_words) %>%
-  kable(caption = 'Top Topic Words - "Probability": STM Prevalence Model')
+# One function replaces four near-identical blocks that differed only in which
+# element of labelTopics() they read and what the caption said. `kable()` is
+# knitr's, not kableExtra's.
+topic_word_table <- function(label_metric, metric_name) {
+  label_metric %>%
+    as.data.frame() %>%
+    rownames_to_column(var = "topic") %>%
+    unite(collapse, !1, remove = FALSE, sep = ", ") %>%
+    rename(top_words = collapse) %>%
+    select(topic, top_words) %>%
+    knitr::kable(
+      caption = paste0('Top Topic Words - "', metric_name, '": STM Prevalence Model')
+    )
+}
 
-lab12.frex.stm <- l12.d[2] %>%
-  as.data.frame() %>% # will collect top 10 lift terms for each topic
-  rownames_to_column(var = "topic") %>%
-  unite(collapse, !1, remove = FALSE, sep = ", ") %>%
-  rename(top_words = collapse) %>%
-  select(topic, top_words) %>%
-  kable(caption = 'Top Topic Words - "FREX": STM Prevalence Model')
-
-lab12.lift.stm <- l12.d[3] %>%
-  as.data.frame() %>% # will collect top 10 lift terms for each topic
-  rownames_to_column(var = "topic") %>%
-  unite(collapse, !1, remove = FALSE, sep = ", ") %>%
-  rename(top_words = collapse) %>%
-  select(topic, top_words) %>%
-  kable(caption = 'Top Topic Words - "Lift": STM Prevalence Model')
-
-lab12.score.stm <- l12.d[4] %>%
-  as.data.frame() %>% # will collect top 10 lift terms for each topic
-  rownames_to_column(var = "topic") %>%
-  unite(collapse, !1, remove = FALSE, sep = ", ") %>%
-  rename(top_words = collapse) %>%
-  select(topic, top_words) %>%
-  kable(caption = 'Top Topic Words - "Score": STM Prevalence Model')
+lab12.prob.stm <- topic_word_table(l12.d[1], "Probability")
+lab12.frex.stm <- topic_word_table(l12.d[2], "FREX")
+lab12.lift.stm <- topic_word_table(l12.d[3], "Lift")
+lab12.score.stm <- topic_word_table(l12.d[4], "Score")
 
 
 # compare tables
@@ -378,9 +388,16 @@ plot(stm.p.12, "labels", labeltype = "prob", width = 1200, topics = c(1:12), n =
 
 # plot distribution of topic proportions -- the two prevalence models produce equivalent results
 
-plot(stm.model.12, "hist", c(1:12), main = "Frequency Distribution of Topics: STM Prevalence Model")
+# `topics` must be named. plot.STM's signature is (x, type, n, topics, ...), so
+# the third POSITIONAL argument is n, not topics: `plot(model, "hist", 1:12)`
+# passed a length-12 vector as n, and labelTopics() then evaluated `if (n < 1)`
+# on it. Under R < 4.2 that was a warning and the first element was used
+# silently; from R 4.2 it is an error, which is how this surfaced.
+# See CODE_REVIEW.md S2-7.
 
-plot(stm.p.12, "hist", c(1:12), main = "Frequency Distribution of Topics: STM Prevalence Model")
+plot(stm.model.12, "hist", topics = c(1:12), main = "Frequency Distribution of Topics: STM Optimized Prevalence Model")
+
+plot(stm.p.12, "hist", topics = c(1:12), main = "Frequency Distribution of Topics: STM Prevalence Model")
 ```
 Use make.dt to create a data table for the model object that we can run queries against 
 
@@ -516,25 +533,47 @@ plot(gender.pred,
   custom.labels = topic_labels()
 )
 
-
-# gender comparison
-
-plot(stm.p.12, "perspectives", topics = (1:12), n = 12, text.cex = 1, main = "Gender-Based Vocabulary: Test Anxiety")
 ```
+
+A "gender comparison" perspectives plot stood here and has been **removed**. It
+could not have produced what its title claimed, for three independent reasons
+(`CODE_REVIEW.md` S2-8):
+
+```r
+plot(stm.p.12, "perspectives", topics = (1:12), n = 12, text.cex = 1,
+     main = "Gender-Based Vocabulary: Test Anxiety")
+```
+
+- **`stm.p.12` has no content covariate.** It is the prevalence-only model — one
+  beta group, no per-gender vocabulary. A `"perspectives"` plot on it cannot show
+  gender-based word use, which is the thing the title promises.
+- **`topics = 1:12` is not a valid perspectives argument.** The plot type
+  contrasts one or two topics, not twelve. This is what made it error under
+  R ≥ 4.2 rather than merely mislead.
+- **The title names a single topic** — "Test Anxiety", topic 3 — contradicting
+  the twelve topics passed.
+
+The block immediately below does this correctly: it uses `stm.c.12`, the content
+model, one topic per plot, with titles derived from the labels — and it already
+includes topic 3. Nothing is lost by removing the broken line.
 Plot differences in word content by gender 1,2,3,5,7,8,9,11,12
 
 ```{r}
 # plot k = 12 model, content only
 
-plot(stm.c.12, "perspectives", topics = c(1), n = 25, text.cex = 1, main = "Topic 1 = Areas for Improvement")
-plot(stm.c.12, "perspectives", topics = c(2), n = 25, text.cex = 1, main = "Topic 2 = Developing Writing Skills")
-plot(stm.c.12, "perspectives", topics = c(3), n = 25, text.cex = 1, main = "Topic 3 = Test Anxiety")
-plot(stm.c.12, "perspectives", topics = c(5), n = 25, text.cex = 1, main = "Topic 5 = Improving Math Skills")
-plot(stm.c.12, "perspectives", topics = c(7), n = 25, text.cex = 1, main = "Topic 7 = Transferable Strategies - Academic Success")
-plot(stm.c.12, "perspectives", topics = c(8), n = 25, text.cex = 1, main = "Topic 8 = Time Management")
-plot(stm.c.12, "perspectives", topics = c(9), n = 25, text.cex = 1, main = "Topic 9 = Getting Right Getting it Done")
-plot(stm.c.12, "perspectives", topics = c(11), n = 25, text.cex = 1, main = "Topic 11 = Applying and Retaining Subject Matter")
-plot(stm.c.12, "perspectives", topics = c(12), n = 25, text.cex = 1, main = "Topic 12 = Managing Distractions")
+# Titles derive from topic_labels() rather than being retyped. Three of these
+# had drifted from the labels they were meant to echo -- topic 7 used a hyphen
+# where the label uses "&", topic 9 dropped a word, and topic 11 spelled
+# "Applying" correctly while the label carried the "Appying" typo
+# (CODE_REVIEW.md X-1). Deriving them means a label change propagates here
+# automatically, which matters while the labels remain tentative.
+
+for (k in c(1, 2, 3, 5, 7, 8, 9, 11, 12)) {
+  plot(stm.c.12, "perspectives",
+    topics = k, n = 25, text.cex = 1,
+    main = paste0("Topic ", k, " = ", topic_labels(topics = k))
+  )
+}
 ```
 
 Plot effects - race. Basic stm prevalence model. This section does not include all of the significant effects. See covariate regressions.
@@ -589,7 +628,9 @@ plot effects of first gen - basic stm model
 tidy(first.gen.pred)
 
 plot(first.gen.pred,
-  covariate = "first_gen", topics = c(1:12), Text.cex = .25,
+  # `Text.cex` (capital T) here was not a graphical parameter, so it was
+  # ignored and R warned six times per plot. Every sibling plot uses `cex`.
+  covariate = "first_gen", topics = c(1:12), cex = .25,
   model = stm.p.12, method = "difference",
   cov.value1 = "FALSE", cov.value2 = "TRUE",
   xlab = "More First Generation ... Less First Generation",
@@ -645,7 +686,7 @@ c6 <- estimateEffect(formula = c(6) ~ gender * age, stmobj = stm.p.12, metadata 
 plot(c2,
   covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .1),
-  printlegend = FALSE, main = "Topic 2: Developing Writing Skills (P < 0.10)"
+  printlegend = FALSE, main = paste0("Topic 2: ", topic_labels(topics = 2), " (P < 0.10)")
 )
 
 plot(c2,
@@ -662,7 +703,7 @@ legend(18, .1, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 plot(c4,
   covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(.04, .18),
-  printlegend = FALSE, main = "Topic 4. Returning Learners-Degree Completion (P < 0.10)"
+  printlegend = FALSE, main = paste0("Topic 4: ", topic_labels(topics = 4), " (P < 0.10)")
 )
 
 plot(c4,
@@ -679,7 +720,7 @@ legend(18, 0.18, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 plot(c6,
   covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .15),
-  printlegend = FALSE, main = "Topic 6: Confirmation and Readiness (P < 0.10)"
+  printlegend = FALSE, main = paste0("Topic 6: ", topic_labels(topics = 6), " (P < 0.10)")
 )
 
 plot(c6,

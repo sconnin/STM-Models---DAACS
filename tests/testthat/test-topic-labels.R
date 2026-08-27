@@ -22,10 +22,17 @@ test_that("labels match the vector the notebooks used verbatim", {
       "Time Management",
       "Getting it Right Getting it Done",
       "Adjusting Ones Mindset",
-      "Appying and Retaining Subject Matter",
+      "Applying and Retaining Subject Matter",
       "Managing Distractions"
     )
   )
+})
+
+test_that("the Appying typo stays fixed", {
+  # Element 11 read "Appying" verbatim from the notebooks, which disagreed with
+  # the plot title that used the correct spelling (CODE_REVIEW.md X-1).
+  expect_false(any(grepl("Appying", TOPIC_LABELS_K12)))
+  expect_true(any(grepl("^Applying and Retaining", TOPIC_LABELS_K12)))
 })
 
 test_that("topic_labels() returns all labels by default", {

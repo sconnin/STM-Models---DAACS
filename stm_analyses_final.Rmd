@@ -526,15 +526,19 @@ Plot differences in word content by gender 1,2,3,5,7,8,9,11,12
 ```{r}
 # plot k = 12 model, content only
 
-plot(stm.c.12, "perspectives", topics = c(1), n = 25, text.cex = 1, main = "Topic 1 = Areas for Improvement")
-plot(stm.c.12, "perspectives", topics = c(2), n = 25, text.cex = 1, main = "Topic 2 = Developing Writing Skills")
-plot(stm.c.12, "perspectives", topics = c(3), n = 25, text.cex = 1, main = "Topic 3 = Test Anxiety")
-plot(stm.c.12, "perspectives", topics = c(5), n = 25, text.cex = 1, main = "Topic 5 = Improving Math Skills")
-plot(stm.c.12, "perspectives", topics = c(7), n = 25, text.cex = 1, main = "Topic 7 = Transferable Strategies - Academic Success")
-plot(stm.c.12, "perspectives", topics = c(8), n = 25, text.cex = 1, main = "Topic 8 = Time Management")
-plot(stm.c.12, "perspectives", topics = c(9), n = 25, text.cex = 1, main = "Topic 9 = Getting Right Getting it Done")
-plot(stm.c.12, "perspectives", topics = c(11), n = 25, text.cex = 1, main = "Topic 11 = Applying and Retaining Subject Matter")
-plot(stm.c.12, "perspectives", topics = c(12), n = 25, text.cex = 1, main = "Topic 12 = Managing Distractions")
+# Titles derive from topic_labels() rather than being retyped. Three of these
+# had drifted from the labels they were meant to echo -- topic 7 used a hyphen
+# where the label uses "&", topic 9 dropped a word, and topic 11 spelled
+# "Applying" correctly while the label carried the "Appying" typo
+# (CODE_REVIEW.md X-1). Deriving them means a label change propagates here
+# automatically, which matters while the labels remain tentative.
+
+for (k in c(1, 2, 3, 5, 7, 8, 9, 11, 12)) {
+  plot(stm.c.12, "perspectives",
+    topics = k, n = 25, text.cex = 1,
+    main = paste0("Topic ", k, " = ", topic_labels(topics = k))
+  )
+}
 ```
 
 Plot effects - race. Basic stm prevalence model. This section does not include all of the significant effects. See covariate regressions.
@@ -645,7 +649,7 @@ c6 <- estimateEffect(formula = c(6) ~ gender * age, stmobj = stm.p.12, metadata 
 plot(c2,
   covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .1),
-  printlegend = FALSE, main = "Topic 2: Developing Writing Skills (P < 0.10)"
+  printlegend = FALSE, main = paste0("Topic 2: ", topic_labels(topics = 2), " (P < 0.10)")
 )
 
 plot(c2,
@@ -662,7 +666,7 @@ legend(18, .1, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 plot(c4,
   covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(.04, .18),
-  printlegend = FALSE, main = "Topic 4. Returning Learners-Degree Completion (P < 0.10)"
+  printlegend = FALSE, main = paste0("Topic 4: ", topic_labels(topics = 4), " (P < 0.10)")
 )
 
 plot(c4,
@@ -679,7 +683,7 @@ legend(18, 0.18, c("Male", "Female"), lwd = 2, col = c("blue", "red"))
 plot(c6,
   covariate = "age", model = interact.signf, method = "continuous", xlab = "Age",
   moderator = "gender", moderator.value = "M", linecol = "blue", ylim = c(0, .15),
-  printlegend = FALSE, main = "Topic 6: Confirmation and Readiness (P < 0.10)"
+  printlegend = FALSE, main = paste0("Topic 6: ", topic_labels(topics = 6), " (P < 0.10)")
 )
 
 plot(c6,

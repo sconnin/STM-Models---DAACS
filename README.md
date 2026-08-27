@@ -48,7 +48,21 @@ everywhere they appear, so revising one propagates to every figure automatically
 6. stm_analyses_final - model diagnostics, topic labeling, covariate effect estimates, and the topic correlation network. 
 
 Shared helpers live in `R/`, tests in `tests/` (`Rscript tests/testthat.R`), and a severity-ranked
-review of known defects in `CODE_REVIEW.md`.
+review of known defects in `CODE_REVIEW.md`. Every computation the notebooks repeat across model
+families is defined once there and called from the notebooks:
+
+| File | Provides |
+|---|---|
+| `cleaning_patterns.R` | the 21 essay-prompt regex patterns, in the order they must be applied |
+| `covariate_levels.R` | gender and race harmonisation across the three institutions |
+| `covariate_effects.R` | `estimateEffect()` fits, the significance filter, and the effect plots |
+| `exemplars.R` | representative-passage selection and the top-essay files |
+| `model_formulas.R` | the prevalence and content formulas the five families are fitted with |
+| `rf_topic_importance.R` | one random forest per topic, and variable-importance plots |
+| `srl_features.R` | the fourteen SRL scales, subset per institution |
+| `topic_labels.R` | the twelve topic labels and the `TopicN` rename map |
+| `topic_prevalence.R` | mean topic proportions and the prevalence bar charts |
+| `topic_word_tables.R` | top-words tables for all four `labelTopics()` weightings |
 
 Note: the trained models are not included here. Beyond their size, fitted STM objects retain
 per-document topic proportions and the covariate design matrix, so they fall under the same data

@@ -40,6 +40,10 @@ library(stringr)
 library(forcats)
 library(magrittr)
 library(stm)
+
+# Shared helpers: the model formulas, held once rather than written out per
+# family. R/model_formulas.R
+source("R/model_formulas.R")
 ```
 
 Load preprocessed data (.csv format) for additional treatment and partitioning via. stm's textProcessor() function. 
@@ -137,9 +141,14 @@ system.time({
   ## elapsed time for the full K = 6..32 sweep was 2286.47s; K = 12 alone is a
   ## fraction of that.
 
+  # PREVALENCE_FORMULA replaces four verbatim copies of the same formula (and
+  # fifteen before the K = 12 narrowing). stm() consumes the formula object --
+  # it does not deparse the argument name -- and the design matrix it produces
+  # against this corpus was checked against the literal, column for column,
+  # since re-fitting to confirm would take hours.
   select.models <- manyTopics(documents, vocab,
     data = meta, K = 12,
-    prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
+    prevalence = PREVALENCE_FORMULA,
     runs = 10, init.type = "Spectral", seed = 811235359
   )
 })
@@ -150,7 +159,7 @@ stm.model.12 <- select.models$out[[1]]
 #
 # select.models <- manyTopics(documents, vocab,
 #   data = meta, K = c(6, 12, 18, 24, 32),
-#   prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
+#   prevalence = PREVALENCE_FORMULA,
 #   runs = 10, init.type = "Spectral", seed = 811235359
 # )
 # stm.model.6  <- select.models$out[[1]]
@@ -170,8 +179,8 @@ In this latter respect, the use of manyTopics is redundant and is included here 
 
 content_prev.model.k12 <- selectModel(documents, vocab,
   data = meta, K = 12,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, runs = 10, seed = 845815922
+  prevalence = PREVALENCE_FORMULA,
+  content = CONTENT_FORMULA, max.em.its = 75, runs = 10, seed = 845815922
 )
 
 # Retained for a future K sweep (seeds as originally assigned):
@@ -199,8 +208,8 @@ Build prevalence & content formula models without optimization: basic stm() meth
 
 stm.pc.12 <- stm(documents, vocab,
   data = meta, K = 12,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
-  content = ~gender, max.em.its = 75, seed = 784654
+  prevalence = PREVALENCE_FORMULA,
+  content = CONTENT_FORMULA, max.em.its = 75, seed = 784654
 )
 
 # Retained for a future K sweep (seeds as originally assigned):
@@ -227,7 +236,7 @@ the one carrying every correction, reproducible.
 ```{r}
 stm.p.12 <- stm(documents, vocab,
   data = meta, K = 12,
-  prevalence = ~ gender + race + first_gen + s(age) + gender * s(age),
+  prevalence = PREVALENCE_FORMULA,
   init.type = "Spectral", max.em.its = 75, seed = 784658
 )
 
@@ -246,7 +255,7 @@ Build content formula without optimization: basic stm() method.
 ```{r}
 stm.c.12 <- stm(documents, vocab,
   data = meta, K = 12,
-  content = ~gender, init.type = "Spectral", max.em.its = 75, seed = 784663
+  content = CONTENT_FORMULA, init.type = "Spectral", max.em.its = 75, seed = 784663
 )
 
 # Retained for a future K sweep:

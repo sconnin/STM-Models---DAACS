@@ -55,6 +55,16 @@ Student self-reflection essays collected through DAACS at three institutions, cl
 | TRUE | 2970 | 36.2 |
 | UNKNOWN | 632 | 7.7 |
 
+**first_gen by institution**
+
+| institution | FALSE | TRUE | UNKNOWN |
+|---|---|---|---|
+| Alb | 150 | 58 | 10 |
+| EC | 813 | 382 | 622 |
+| WG | 3640 | 2530 | 0 |
+
+`UNKNOWN` is almost entirely one institution — 622 of 632 such documents. Institution is **not** in the prevalence formula, so a contrast against `UNKNOWN` is close to an institution indicator. Section 4.2 reports it separately for that reason.
+
 | Statistic | Age |
 |---|---|
 | Min. | 17 |
@@ -230,22 +240,43 @@ Race enters as six contrasts and age as a ten-term spline, so a term-level filte
 | 3 | Test Anxiety | 6 | 0.72 | 0.635 | 0.693 | no |
 | 6 | Confirmation and Readiness | 6 | 0.22 | 0.969 | 0.969 | no |
 
-**first_gen** — 9 of 12 topics survive at FDR 0.05
+**first_gen (TRUE vs FALSE)** — 1 of 12 topics survive at FDR 0.05
+
+The substantive contrast: first-generation students against those known not to be.
 
 | Topic | Label | Terms | F | p | p (BH) | FDR < 0.05 |
 |---|---|---|---|---|---|---|
-| 2 | Developing Writing Skills | 2 | 21 | 7.90e-10 | 9.49e-09 | yes |
-| 8 | Time Management | 2 | 17.6 | 2.44e-08 | 1.46e-07 | yes |
-| 12 | Managing Distractions | 2 | 14.4 | 5.48e-07 | 2.19e-06 | yes |
-| 4 | Returning Learners-Degree Completion | 2 | 13.7 | 1.18e-06 | 3.54e-06 | yes |
-| 3 | Test Anxiety | 2 | 11 | 1.66e-05 | 3.98e-05 | yes |
-| 1 | Areas for Improvement | 2 | 10.2 | 3.78e-05 | 7.55e-05 | yes |
-| 11 | Applying and Retaining Subject Matter | 2 | 7.08 | 0.000845 | 0.00145 | yes |
-| 7 | Transferable Strategies & Academic Success | 2 | 6.89 | 0.00103 | 0.00154 | yes |
-| 5 | Improving Math Skills | 2 | 4.36 | 0.0128 | 0.017 | yes |
-| 9 | Getting it Right Getting it Done | 2 | 2.48 | 0.0838 | 0.101 | no |
-| 6 | Confirmation and Readiness | 2 | 1.79 | 0.167 | 0.183 | no |
-| 10 | Adjusting Ones Mindset | 2 | 1.54 | 0.214 | 0.214 | no |
+| 12 | Managing Distractions | 1 | 24 | 1.00e-06 | 1.20e-05 | yes |
+| 8 | Time Management | 1 | 5.71 | 0.0169 | 0.101 | no |
+| 7 | Transferable Strategies & Academic Success | 1 | 4.42 | 0.0356 | 0.107 | no |
+| 9 | Getting it Right Getting it Done | 1 | 4.49 | 0.0341 | 0.107 | no |
+| 1 | Areas for Improvement | 1 | 2.23 | 0.135 | 0.272 | no |
+| 11 | Applying and Retaining Subject Matter | 1 | 2.22 | 0.136 | 0.272 | no |
+| 5 | Improving Math Skills | 1 | 0.7 | 0.404 | 0.606 | no |
+| 6 | Confirmation and Readiness | 1 | 0.77 | 0.379 | 0.606 | no |
+| 10 | Adjusting Ones Mindset | 1 | 0.48 | 0.49 | 0.654 | no |
+| 2 | Developing Writing Skills | 1 | 0.25 | 0.618 | 0.741 | no |
+| 3 | Test Anxiety | 1 | 0 | 0.983 | 0.983 | no |
+| 4 | Returning Learners-Degree Completion | 1 | 0 | 0.972 | 0.983 | no |
+
+**first_gen (UNKNOWN vs FALSE)** — 8 of 12 topics survive at FDR 0.05
+
+**Not an effect of first-generation status.** UNKNOWN is a missingness category concentrated in one institution, so this row measures how that institution's essays differ. Reported for transparency, not as a finding.
+
+| Topic | Label | Terms | F | p | p (BH) | FDR < 0.05 |
+|---|---|---|---|---|---|---|
+| 2 | Developing Writing Skills | 1 | 41.8 | 1.06e-10 | 1.28e-09 | yes |
+| 4 | Returning Learners-Degree Completion | 1 | 25.7 | 4.16e-07 | 2.50e-06 | yes |
+| 3 | Test Anxiety | 1 | 21.2 | 4.13e-06 | 1.65e-05 | yes |
+| 8 | Time Management | 1 | 19.2 | 1.18e-05 | 3.54e-05 | yes |
+| 1 | Areas for Improvement | 1 | 15.3 | 9.15e-05 | 0.00022 | yes |
+| 5 | Improving Math Skills | 1 | 8.65 | 0.00328 | 0.00656 | yes |
+| 11 | Applying and Retaining Subject Matter | 1 | 8.15 | 0.00432 | 0.0074 | yes |
+| 7 | Transferable Strategies & Academic Success | 1 | 6.6 | 0.0102 | 0.0153 | yes |
+| 6 | Confirmation and Readiness | 1 | 2.11 | 0.147 | 0.176 | no |
+| 10 | Adjusting Ones Mindset | 1 | 2.16 | 0.142 | 0.176 | no |
+| 12 | Managing Distractions | 1 | 1.12 | 0.289 | 0.315 | no |
+| 9 | Getting it Right Getting it Done | 1 | 0.04 | 0.848 | 0.848 | no |
 
 **age** — 12 of 12 topics survive at FDR 0.05
 
@@ -263,6 +294,8 @@ Race enters as six contrasts and age as a ten-term spline, so a term-level filte
 | 11 | Applying and Retaining Subject Matter | 10 | 1.97 | 0.0319 | 0.0383 | yes |
 | 12 | Managing Distractions | 10 | 1.92 | 0.0385 | 0.042 | yes |
 | 10 | Adjusting Ones Mindset | 10 | 1.84 | 0.0484 | 0.0484 | yes |
+
+**On the adjustment itself.** Benjamini-Hochberg controls the false discovery rate under independence or positive dependence. Topic proportions are compositional -- each document's twelve proportions sum to 1 -- so tests across topics carry some negative dependence, which this procedure does not formally cover. Benjamini-Yekutieli holds under arbitrary dependence and is the conservative alternative; `adjust_effects(method = "BY")` and `joint_effect_test(method = "BY")` will produce it. BH is reported here as the conventional choice, not because the dependence structure has been verified.
 
 **Read 4.1 and 4.2 together.** For race the two disagree, instructively: no individual contrast survives term-level adjustment, yet several topics survive the joint test. That is not a contradiction. The joint test asks whether race matters *at all* for a topic, pooling the evidence across all six contrasts, and pays the multiplicity cost once rather than six times. Where the two disagree, the joint test is the one that matches the question being asked; the term-level table is the one that says which contrast is driving it, and for race no single contrast is.
 
@@ -292,7 +325,7 @@ Difference plots contrast two levels across all twelve topics. They show directi
 
 ### 4.4 Age
 
-Age is jointly significant for 12 of 12 topics. The three strongest are shown; the relationship is a spline, so direction varies across the age range rather than being a single slope.
+Age is jointly significant for 12 of 12 topics. Read that as a statement about detectability, not importance: with 8210 documents a ten-degree-of-freedom test has enough power that significance is a weak bar, and a near-universal result is what high power looks like. The curves below carry the magnitude, and the relationship is a spline, so direction varies across the age range rather than being a single slope. The three strongest are shown.
 
 ![Topic 9 (Getting it Right Getting it Done) prevalence by age](figures/effect_age_topic9.png)
 
@@ -349,6 +382,8 @@ Topics that co-occur within documents above a simple correlation cutoff of 0.05.
 
 One random forest per topic, predicting that topic's document prevalence from the fourteen SRL scale scores. Variance explained is the forest's own out-of-bag R-squared, so it is an estimate of predictive signal, not a significance test.
 
+**This section covers two institutions, not three.** Albany collects no grit measure, so `srl_grit` is empty for all of its documents, and the listwise deletion inside each forest drops every Albany row -- 490 of them, the whole institution -- because one of fourteen predictors is missing. The forests are fitted on WGU and Excelsior only. Dropping `srl_grit` from the predictor set would restore Albany at the cost of that scale; that is a modelling decision and has not been taken. See `CODE_REVIEW.md` S1-1.
+
 | Topic | Label | Documents | Variance explained (%) |
 |---|---|---|---|
 | 3 | Test Anxiety | 7960 | 21.1 |
@@ -388,10 +423,13 @@ The same approach with the direction reversed: topic proportions as predictors, 
 - **Topic labels are provisional.** Topic 1 is a known weak fit and is retained pending review of its exemplar essays. See `README.md`.
 - **K = 12 was chosen by professional judgement**, informed by coherence and exclusivity diagnostics rather than determined by them. See `README.md`.
 - **The essay filter has a known gap.** One submission below the 50-unique-word floor remains in the corpus by explicit decision; see `CODE_REVIEW.md` S1-9.
-- **No causal claim is supported.** These are associations between topic prevalence and covariates in observational data from three institutions with different intake populations, and institution is not in the prevalence formula.
+- **No causal claim is supported.** These are associations between topic prevalence and covariates in observational data from three institutions with different intake populations.
+- **Institution is not in the prevalence formula**, and it is confounded with at least one covariate level: `first_gen == UNKNOWN` is almost entirely one institution. Any covariate level that tracks institution will absorb institution differences. Adding institution as a covariate would require re-fitting the models.
 - **Random forest variance explained is not a hypothesis test** and carries no p-value. Treat small values as absence of signal.
+- **The random forest section excludes Albany entirely**, through listwise deletion on a scale that institution does not collect. See section 6.
+- **The FDR adjustment assumes a dependence structure that has not been checked.** Topic proportions are compositional; see the note in 4.2.
 - **Uncorrected p-values appear nowhere in this document except the count table in 4.1**, which exists to show what adjustment changes.
 - **Section 4 is reproducible only because it is seeded.** The estimation and its summary are both stochastic; see the note in 4.1.
 
-Generated from commit `74297cd` with `set.seed(20220527)`.
+Generated from commit `effee5c` with `set.seed(20220527)`.
 

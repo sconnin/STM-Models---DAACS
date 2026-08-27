@@ -59,6 +59,13 @@ levels, age as a ten-term spline — are assessed with one joint Wald test per t
 test per coefficient. The joint test reproduces the marginal t-test exactly when a covariate has a
 single term, which is what makes the rows comparable.
 
+One finding from applying this: the pooled `first_gen` test reported an effect on 9 of 12 topics.
+Split apart, the substantive contrast — first-generation students against those known not to be —
+survives for **1** topic, while the `UNKNOWN` contrast survives for 8. `UNKNOWN` is a missingness
+category that is 98% one institution, and institution is not a covariate in these models. The two
+are now reported separately, and the `UNKNOWN` row is labelled as an institution artifact rather than
+a finding.
+
 Both the estimation and its summary are stochastic — `estimateEffect(uncertainty = "Global")` draws
 posterior samples, and `summary()` simulates on top of them — so the analysis and the results
 document each set a seed. Without one, the statistics and the count of significant terms move
@@ -109,6 +116,12 @@ Working list. Items are substantive unless marked bookkeeping.
 - [ ] **Read the random forest results** in `results/RESULTS.md` §6 and decide whether the
       SRL-to-topic-prevalence analysis supports a claim or should be reported as a null result.
       Out-of-bag R² can be negative; small values mean no detectable signal, not a weak one.
+- [ ] **Decide whether the random forests should include Albany.** They currently do not: Albany
+      collects no grit measure, so listwise deletion on `srl_grit` drops all 490 of its documents
+      and the forests are fitted on WGU and Excelsior only. Dropping that one scale from the
+      predictor set would restore the institution at the cost of the measure.
+- [ ] **Decide whether institution belongs in the prevalence formula.** It is absent, and it is
+      confounded with at least one covariate level (see above). Adding it means re-fitting.
 - [ ] **Reconstruct and record the K = 12 rationale** as described above.
 - [ ] **Write the results narrative.** `results/RESULTS.md` records what the models produce; it does
       not interpret them.

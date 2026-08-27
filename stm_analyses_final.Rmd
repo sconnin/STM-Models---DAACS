@@ -528,10 +528,17 @@ data.frame(
 
 # 3. one joint test per topic for the multi-term covariates
 
+# first_gen is split on purpose. It has three levels, and UNKNOWN is almost
+# entirely Excelsior -- 622 of 632 such documents, with none at WGU. Institution
+# is not a covariate in these models, so pooling UNKNOWN into one joint test
+# would report a first-generation effect that is partly an institution effect.
+# TRUE vs FALSE is the substantive question; UNKNOWN vs FALSE is a missingness
+# diagnostic.
 joint.tests <- list(
   gender = joint_effect_test(gender.pred, "^gender"),
   race = joint_effect_test(race.pred, "^race"),
-  first_gen = joint_effect_test(first.gen.pred, "^first_gen"),
+  first_gen_true = joint_effect_test(first.gen.pred, "^first_genTRUE"),
+  first_gen_unknown = joint_effect_test(first.gen.pred, "^first_genUNKNOWN"),
   age = joint_effect_test(age.pred, "^s\\(age\\)")
 )
 

@@ -157,6 +157,22 @@ for (v in c("institution", "gender", "race", "first_gen")) {
   blank()
   add_table(counts)
 }
+# first_gen carries an UNKNOWN level, and it is not distributed evenly. Showing
+# the crosstab here is what makes section 4.2's split reading legible.
+if (all(c("first_gen", "institution") %in% names(meta))) {
+  crosstab <- as.data.frame.matrix(table(meta$institution, meta$first_gen))
+  crosstab <- tibble::rownames_to_column(crosstab, var = "institution")
+  add("**first_gen by institution**")
+  blank()
+  add_table(crosstab)
+  add("`UNKNOWN` is almost entirely one institution — ",
+      sum(meta$first_gen == "UNKNOWN" & meta$institution == "EC"), " of ",
+      sum(meta$first_gen == "UNKNOWN"), " such documents. Institution is **not** ",
+      "in the prevalence formula, so a contrast against `UNKNOWN` is close to an ",
+      "institution indicator. Section 4.2 reports it separately for that reason.")
+  blank()
+}
+
 if ("age" %in% names(meta)) {
   age_summary <- summary(meta$age)
   add_table(tibble(
@@ -305,11 +321,27 @@ add("Race enters as six contrasts and age as a ten-term spline, so a term-level 
     "marginal t-test exactly, which is what makes it comparable across rows.")
 blank()
 
+# first-generation status is split deliberately. Pooling TRUE and UNKNOWN into
+# one joint test would report a first-generation effect that is partly an
+# institution effect, since UNKNOWN is almost entirely Excelsior and institution
+# is not a covariate in these models.
 joint_specs <- list(
-  list(name = "gender", effect = effects$gender, pattern = "^gender"),
-  list(name = "race", effect = effects$race, pattern = "^race"),
-  list(name = "first_gen", effect = effects$first_gen, pattern = "^first_gen"),
-  list(name = "age", effect = effects$age, pattern = "^s\\(age\\)")
+  list(name = "gender", effect = effects$gender, pattern = "^gender",
+       note = NULL),
+  list(name = "race", effect = effects$race, pattern = "^race",
+       note = NULL),
+  list(name = "first_gen (TRUE vs FALSE)", effect = effects$first_gen,
+       pattern = "^first_genTRUE",
+       note = "The substantive contrast: first-generation students against those known not to be."),
+  list(name = "first_gen (UNKNOWN vs FALSE)", effect = effects$first_gen,
+       pattern = "^first_genUNKNOWN",
+       note = paste(
+         "**Not an effect of first-generation status.** UNKNOWN is a missingness",
+         "category concentrated in one institution, so this row measures how that",
+         "institution's essays differ. Reported for transparency, not as a finding."
+       )),
+  list(name = "age", effect = effects$age, pattern = "^s\\(age\\)",
+       note = NULL)
 )
 
 joint_all <- map_dfr(joint_specs, function(spec) {
@@ -333,8 +365,23 @@ for (spec in joint_specs) {
   add("**", spec$name, "** — ", sum(block$`FDR < 0.05` == "yes"),
       " of 12 topics survive at FDR 0.05")
   blank()
+  if (!is.null(spec$note)) {
+    add(spec$note)
+    blank()
+  }
   add_table(block)
 }
+
+add("**On the adjustment itself.** Benjamini-Hochberg controls the false ",
+    "discovery rate under independence or positive dependence. Topic ",
+    "proportions are compositional -- each document's twelve proportions sum to ",
+    "1 -- so tests across topics carry some negative dependence, which this ",
+    "procedure does not formally cover. Benjamini-Yekutieli holds under arbitrary ",
+    "dependence and is the conservative alternative; `adjust_effects(method = ",
+    "\"BY\")` and `joint_effect_test(method = \"BY\")` will produce it. BH is ",
+    "reported here as the conventional choice, not because the dependence ",
+    "structure has been verified.")
+blank()
 
 add("**Read 4.1 and 4.2 together.** For race the two disagree, instructively: no ",
     "individual contrast survives term-level adjustment, yet several topics ",
@@ -391,8 +438,12 @@ blank()
 top_age <- joint_all |> filter(Covariate == "age") |> arrange(p.adjusted) |> head(3)
 add("Age is jointly significant for ",
     sum(joint_all$Covariate == "age" & joint_all$p.adjusted < 0.05),
-    " of 12 topics. The three strongest are shown; the relationship is a spline, ",
-    "so direction varies across the age range rather than being a single slope.")
+    " of 12 topics. Read that as a statement about detectability, not importance: ",
+    "with ", n_documents, " documents a ten-degree-of-freedom test has enough ",
+    "power that significance is a weak bar, and a near-universal result is what ",
+    "high power looks like. The curves below carry the magnitude, and the ",
+    "relationship is a spline, so direction varies across the age range rather ",
+    "than being a single slope. The three strongest are shown.")
 blank()
 for (k in top_age$topic) {
   file <- paste0("effect_age_topic", k, ".png")
@@ -478,6 +529,14 @@ add("One random forest per topic, predicting that topic's document prevalence ",
     "from the fourteen SRL scale scores. Variance explained is the forest's own ",
     "out-of-bag R-squared, so it is an estimate of predictive signal, not a ",
     "significance test.")
+blank()
+add("**This section covers two institutions, not three.** Albany collects no grit ",
+    "measure, so `srl_grit` is empty for all of its documents, and the listwise ",
+    "deletion inside each forest drops every Albany row -- 490 of them, the whole ",
+    "institution -- because one of fourteen predictors is missing. The forests are ",
+    "fitted on WGU and Excelsior only. Dropping `srl_grit` from the predictor set ",
+    "would restore Albany at the cost of that scale; that is a modelling decision ",
+    "and has not been taken. See `CODE_REVIEW.md` S1-1.")
 blank()
 
 load("DAACS-WGU.rda")
@@ -577,10 +636,18 @@ add("- **The essay filter has a known gap.** One submission below the ",
     "`CODE_REVIEW.md` S1-9.")
 add("- **No causal claim is supported.** These are associations between topic ",
     "prevalence and covariates in observational data from three institutions ",
-    "with different intake populations, and institution is not in the prevalence ",
-    "formula.")
+    "with different intake populations.")
+add("- **Institution is not in the prevalence formula**, and it is confounded with ",
+    "at least one covariate level: `first_gen == UNKNOWN` is almost entirely one ",
+    "institution. Any covariate level that tracks institution will absorb ",
+    "institution differences. Adding institution as a covariate would require ",
+    "re-fitting the models.")
 add("- **Random forest variance explained is not a hypothesis test** and carries ",
     "no p-value. Treat small values as absence of signal.")
+add("- **The random forest section excludes Albany entirely**, through listwise ",
+    "deletion on a scale that institution does not collect. See section 6.")
+add("- **The FDR adjustment assumes a dependence structure that has not been ",
+    "checked.** Topic proportions are compositional; see the note in 4.2.")
 add("- **Uncorrected p-values appear nowhere in this document except the count ",
     "table in 4.1**, which exists to show what adjustment changes.")
 add("- **Section 4 is reproducible only because it is seeded.** The estimation ",

@@ -914,9 +914,12 @@ Topic 11 is the awkward one: the plot title is spelled correctly and **the canon
 typo**, so the misspelling is the version that appears in six figures and the topic-correlation
 network while the correct spelling appears in one.
 
-**Not resolved.** `R/topic_labels.R` preserves the vector exactly, typo included, because correcting
-it changes figure output. The nine plot titles were left untouched for the same reason. Deciding
-which spelling wins — and applying it in one place — is a one-line change once you make the call.
+**RESOLVED** — the correct spelling won. `TOPIC_LABELS_K12[11]` is now "Applying and Retaining
+Subject Matter", with a test pinning it. The three drifted plot titles were not corrected by hand:
+all nine perspective titles and the three interaction titles now derive from `topic_labels()` rather
+than being retyped, so this class of disagreement cannot recur and a label revision propagates to
+every figure automatically. That matters while the labels remain provisional (S5-1). Figure text
+changes accordingly; no value does.
 
 ### X-2 · Top-essay files were written with a spurious frequency column
 `essay_examples_final.Rmd` — inside the former `top.essays()`

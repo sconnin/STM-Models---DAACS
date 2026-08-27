@@ -51,6 +51,7 @@ source("R/topic_labels.R") # TOPIC_LABELS_K12, topic_labels()
 source("R/topic_prevalence.R") # topic_proportions(), plot_topic_proportions()
 source("R/topic_word_tables.R") # topic_word_table(), topic_word_tables()
 source("R/covariate_effects.R") # estimate_effects(), significant_effects(), plots
+source("R/multiple_comparisons.R") # adjust_effects(), joint_effect_test()
 ```
 
 Two libraries were dropped from this block. `httr` was declared here and in two
@@ -445,6 +446,12 @@ This process leverages the meta file to predict prevalence. A model specified fo
 # standard errors and would narrow every interval reported if it were dropped
 # from one copy.
 
+# estimateEffect(uncertainty = "Global") draws posterior samples and its
+# summary() simulates on top of them, so these estimates are stochastic. Without
+# a seed the F statistics and the count of terms clearing 0.05 both move between
+# runs -- the same class of defect as the unseeded model fits in S3-1.
+set.seed(20220527)
+
 covariate.preds <- estimate_effects(
   model = stm.p.12,
   metadata = meta,
@@ -463,15 +470,72 @@ age.pred <- covariate.preds$age
 
 
 # tidy format - filter for significant effects
+#
+# UNCORRECTED. Kept only as the comparison for the adjusted results below --
+# every number here is one of 228 tests, so roughly eleven of the terms that
+# clear 0.05 are expected to do so by chance. Do not report from this.
 
 lapply(covariate.preds, significant_effects)
 
-# summary format -- hash: topics with signf at 0.05
+# summary format -- hash: topics with signf at 0.05, uncorrected
+#
+# The trailing comments record what the ORIGINAL, uncorrected analysis found.
+# They are kept as a record of what changed, not as results.
 
 gp <- summary(gender.pred) # 1,2,3,5,7,8,9,11,12
 rp <- summary(race.pred) # 2, 4,7,9
 fgp <- summary(first.gen.pred) # 7,8,9,12
 ag <- summary(age.pred) # 1, 3, 4, 5, 7, 8, 9, 10, 12
+```
+
+### Multiple comparisons
+
+Every covariate is tested against all twelve topics. Counted the way the filter
+above counts them that is **228 hypotheses** — 12 for gender, 72 for race across
+its seven levels, 24 for first-generation status across its three, and 120 for
+age, because `s(age)` expands to a ten-term spline. At an uncorrected 0.05
+roughly eleven terms would clear the bar from noise alone.
+
+Three responses, applied together rather than chosen between
+(`R/multiple_comparisons.R`):
+
+1. **Say what this is.** These results are exploratory and are reported as such.
+2. **Control the false discovery rate** within each covariate family, rather than
+   the family-wise error rate — the question is what fraction of the reported
+   topics are spurious, not whether any single one is certain.
+3. **Ask each question once.** Race enters as six contrasts and age as ten spline
+   terms, so a term-level filter asks the wrong question repeatedly. A joint Wald
+   test asks it once per topic, and reproduces the marginal t-test exactly when a
+   covariate has only one term.
+
+```{r}
+# 1. the caveat, held in one place so every write-up states the same thing
+
+cat(exploratory_note(alpha = 0.05), fill = TRUE)
+
+# 2. Benjamini-Hochberg within each covariate family
+
+adjusted.preds <- lapply(covariate.preds, adjust_effects)
+
+# how much the adjustment changes -- raw count vs surviving count
+data.frame(
+  covariate = names(covariate.preds),
+  terms = vapply(adjusted.preds, nrow, integer(1)),
+  uncorrected = vapply(covariate.preds, \(e) nrow(significant_effects(e)), integer(1)),
+  fdr_05 = vapply(covariate.preds, \(e) nrow(significant_effects_adjusted(e)), integer(1)),
+  row.names = NULL
+)
+
+# 3. one joint test per topic for the multi-term covariates
+
+joint.tests <- list(
+  gender = joint_effect_test(gender.pred, "^gender"),
+  race = joint_effect_test(race.pred, "^race"),
+  first_gen = joint_effect_test(first.gen.pred, "^first_gen"),
+  age = joint_effect_test(age.pred, "^s\\(age\\)")
+)
+
+joint.tests
 ```
        
 

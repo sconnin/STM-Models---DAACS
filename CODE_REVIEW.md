@@ -635,6 +635,30 @@ zero or negative (`-3.2`, `-1.54`, `-1.04`, `-3.08`), where the sign itself may 
 independently reproducible. **This changes all reported variance-explained figures**: the originals
 came from unseeded runs that cannot be recovered.
 
+### S3-6 · `estimateEffect()` is unseeded, and it is stochastic
+`stm_analyses_final.Rmd` — every covariate effect
+
+Found while building `results/RESULTS.md`. `estimateEffect(uncertainty = "Global")` draws posterior
+samples of the topic proportions, and `summary.estimateEffect()` — which `tidy()` calls — simulates
+500 further draws per sample to get standard errors. Neither was seeded, so no covariate result in
+this analysis could be regenerated.
+
+**Measured across two builds of the results document.** One topic's gender F statistic came out at
+150 and at 181; term-level p-values moved by up to 0.016, changing how many terms clear an
+uncorrected 0.05 (8 versus 7 for race, 47 versus 49 for age).
+
+This is the same defect as S3-1 in a different place: a stochastic procedure reported as if it were
+deterministic. It is worse in one respect — the model fits at least produced a saved artifact,
+whereas these estimates are recomputed on every run.
+
+**RESOLVED** — `set.seed(20220527)` before the estimation in both
+`stm_analyses_final.Rmd` and `scripts/build_results.R`, verified: two runs under the seed produce
+bit-identical joint tests and term-level p-values. The joint tests in `R/multiple_comparisons.R`
+pool the posterior draws analytically rather than by simulation, so they are additionally stable
+against the `summary()` layer.
+
+---
+
 ### S3-3 · Frequency thresholds hardcoded as absolute counts
 `stm_models_final.rmd:57`
 

@@ -35,6 +35,7 @@ Passages-*/
 # repository's history — untracking a file does not remove earlier commits.
 CODE_REVIEW.md
 results/RESULTS.md
+Outstanding_items_*.md
 
 # Knitted reports — regenerate rather than commit; HTML output embeds
 # data frames printed by `df_print: paged` chunks.

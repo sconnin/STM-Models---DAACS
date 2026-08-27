@@ -625,7 +625,49 @@ fig("rf_feedback_views.png", "Topic importance for predicting feedback views")
 # ---------------------------------------------------------------------------
 # Caveats
 # ---------------------------------------------------------------------------
-add("## 7. Caveats and open items")
+# Provenance moved here out of README.md: it belongs with the results it
+# qualifies, and the README is a public-facing file while this document is not.
+add("## 7. Provenance and analytic record")
+blank()
+add("### Obtaining the data")
+blank()
+add("No DAACS data is included in the repository. Running the pipeline requires ",
+    "obtaining the source data through the appropriate channels and placing it in ",
+    "the working directory locally. `.gitignore` excludes `*.Rdata`, `*.Rda`, ",
+    "`*.rda`, `*.csv` and knitted HTML as a backstop, but check `git status` ",
+    "before staging regardless.")
+blank()
+
+add("### Why K = 12, and what preceded it")
+blank()
+add("K = 12 was settled by best professional judgement, informed by semantic ",
+    "coherence and exclusivity diagnostics rather than determined by them. That ",
+    "review is complete and the decision is final for this analysis, so ",
+    "`stm_models_final.rmd` fits K = 12 only. The full K = 6/12/18/24/32 sweep is ",
+    "retained, commented, with its seeds reserved, and the ",
+    "exclusivity-versus-coherence chunk in `stm_analyses_final.Rmd` is marked ",
+    "`eval = FALSE`; the two are a pair and must be restored together.")
+blank()
+add("**Two limits on that record.** The original models were fitted without seeds, ",
+    "so the exact objects behind the K comparison cannot be regenerated — seeds ",
+    "were added when the corrected models were re-fit. And the review itself was ",
+    "interpretive: no written record survives of which essays were read, or of ",
+    "what distinguished K = 12 from its neighbours. If K needs to be defended in a ",
+    "write-up, that reasoning should be reconstructed and written down while it is ",
+    "still recoverable.")
+blank()
+
+add("### Topic 1")
+blank()
+add("Topic 1 is labelled \"Areas for Improvement\" and is the weakest of the ",
+    "twelve. Across all four `labelTopics()` metrics it reads as *self-monitoring ",
+    "and study strategy* — its distinctive terms are `self-monitor`, ",
+    "`self-evalu`, `brainstorm`, `assign`, `schoolwork`. The label is retained by ",
+    "decision of the project owner (2026-08-27) pending review of its exemplar ",
+    "essays, and should be treated as the least reliable label in this document.")
+blank()
+
+add("## 8. Caveats and open items")
 blank()
 add("- **Topic labels are provisional.** Topic 1 is a known weak fit and is ",
     "retained pending review of its exemplar essays. See `README.md`.")

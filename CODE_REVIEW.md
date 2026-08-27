@@ -433,7 +433,25 @@ existing process** and currently sits in the modelling corpus.
 (the other 2 are already excluded via `remove.csv`) and change the corpus from 8,210 documents — a
 modelling decision, not a QA fix, and one that would invalidate the `n_documents == 8210` assertion
 and every published proportion. The QA block reports the count and the minimum instead of asserting
-zero. Decide this alongside the re-fit; the practical stakes are one essay, not three.
+zero.
+
+### Decision — 2026-08-27: the essay stays, the corpus remains 8,210
+
+**Decided by the project owner.** The one uncaught essay is retained. It holds 48 unique words
+against a 50-word floor, and is 0.012% of an 8,210-document corpus; correcting for it would
+invalidate the `n_documents == 8210` assertion and every published proportion, and require a re-fit,
+to remove two words' worth of shortfall from one document.
+
+Options considered and rejected:
+
+- **Move the unique-word count to the end of `cleaner()`.** The principled fix — it makes the filter
+  measure what it claims to measure — but it changes the corpus and forces a re-fit.
+- **Add the `doc_id` to `remove.csv`.** Same corpus effect and same re-fit, and it would blur the
+  provenance of that file: `remove.csv` records human visual inspection, not mechanical detection.
+
+**If a re-fit is ever undertaken for another reason, fold the first option in then.** Until that
+happens the QA block reports rather than asserts, which is the correct behaviour: a non-zero count
+here is expected, not a failure, and this section records why.
 
 ---
 
@@ -914,9 +932,12 @@ Topic 11 is the awkward one: the plot title is spelled correctly and **the canon
 typo**, so the misspelling is the version that appears in six figures and the topic-correlation
 network while the correct spelling appears in one.
 
-**Not resolved.** `R/topic_labels.R` preserves the vector exactly, typo included, because correcting
-it changes figure output. The nine plot titles were left untouched for the same reason. Deciding
-which spelling wins — and applying it in one place — is a one-line change once you make the call.
+**RESOLVED** — the correct spelling won. `TOPIC_LABELS_K12[11]` is now "Applying and Retaining
+Subject Matter", with a test pinning it. The three drifted plot titles were not corrected by hand:
+all nine perspective titles and the three interaction titles now derive from `topic_labels()` rather
+than being retyped, so this class of disagreement cannot recur and a label revision propagates to
+every figure automatically. That matters while the labels remain provisional (S5-1). Figure text
+changes accordingly; no value does.
 
 ### X-2 · Top-essay files were written with a spurious frequency column
 `essay_examples_final.Rmd` — inside the former `top.essays()`
